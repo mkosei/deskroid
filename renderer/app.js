@@ -1,0 +1,649 @@
+const canvas = document.getElementById('stage');
+const bubble = document.getElementById('bubble');
+const bubbleName = document.getElementById('bubble-name');
+const bubbleYou = document.getElementById('bubble-you');
+const bubbleText = document.getElementById('bubble-text');
+const statusEl = document.getElementById('status');
+const statusText = document.getElementById('status-text');
+const inputBar = document.getElementById('input-bar');
+const input = document.getElementById('input');
+const sendBtn = document.getElementById('send');
+const micBtn = document.getElementById('mic');
+const levelBar = document.querySelector('#level i');
+
+let config;
+let character;            // { view, hitTest, setMouth, lookAt, setExpression?, tap? }
+let history = [];         // Ollama に送る会話履歴（system 以外）
+let generating = false;   // 返答ストリーミング中か
+let currentChatId = 0;
+let bubbleTimer = null;
+
+const app = new PIXI.Application({
+  view: canvas,
+  resizeTo: window,
+  backgroundAlpha: 0,
+  antialias: true,
+});
+
+// ---------- キャラクター ----------
+
+async function loadLive2D(url) {
+  const model = await PIXI.live2d.Live2DModel.from(url, { autoInteract: false });
+  const scale = Math.min(
+    (window.innerWidth * 0.95) / model.width,
+    (window.innerHeight * 0.8) / model.height,
+  ) * (config.modelScale || 1);
+  model.scale.set(scale);
+  model.anchor.set(0.5, 1);
+  model.position.set(window.innerWidth / 2, window.innerHeight);
+  app.stage.addChild(model);
+
+  // 表情ファイルの無いモデル向け：パラメータを直接動かして表情を作る
+  let exprParams = {};
+  let exprWeight = 0;
+  let exprTarget = 0;
+
+  let mouth = 0;
+  model.internalModel.on('beforeModelUpdate', () => {
+    const core = model.internalModel.coreModel;
+    exprWeight += (exprTarget - exprWeight) * 0.12;
+    for (const [id, v] of Object.entries(exprParams)) core.setParameterValueById(id, v, exprWeight);
+    core.setParameterValueById('ParamMouthOpenY', mouth);
+  });
+
+  return {
+    view: model,
+    hitTest: (x, y) => model.getBounds().contains(x, y),
+    setMouth: (v) => { mouth = v; },
+    lookAt: (x, y) => model.focus(x, y),
+    // 文字列なら exp3.json の表情名、オブジェクトなら { パラメータID: 値 }
+    setExpression: (expr) => {
+      if (!expr) return;
+      if (typeof expr === 'string') {
+        model.expression(expr);
+      } else if (Object.keys(expr).length) {
+        exprParams = expr;
+        exprWeight = 0;
+        exprTarget = 1;
+      } else {
+        exprTarget = 0;
+      }
+    },
+    // 上の方を触ったら頭、それ以外は体のモーション（FORCE 優先度）
+    tap: (x, y) => {
+      const b = model.getBounds();
+      const part = y < b.y + b.height * 0.22 ? 'head' : 'body';
+      const group = config.tapMotions?.[part];
+      if (group) model.motion(group, undefined, 3);
+    },
+  };
+}
+
+// モデル未設定時の仮キャラ（図形で描画）
+function createPlaceholder() {
+  const root = new PIXI.Container();
+  const body = new PIXI.Graphics();
+  const face = new PIXI.Container();
+  const eyes = new PIXI.Graphics();
+  const mouthG = new PIXI.Graphics();
+  const R = 110;
+
+  body.beginFill(0x2a2650).lineStyle(4, 0xd2b46c).drawEllipse(0, 0, R * 1.1, R).endFill();
+  face.addChild(eyes, mouthG);
+  root.addChild(body, face);
+  root.position.set(window.innerWidth / 2, window.innerHeight - R - 70);
+  app.stage.addChild(root);
+
+  let mouth = 0;
+  let blink = 1;
+  let nextBlink = performance.now() + 2500;
+  let look = { x: 0, y: 0 };
+  const t0 = performance.now();
+
+  app.ticker.add(() => {
+    const now = performance.now();
+    if (now > nextBlink) { blink = 0; nextBlink = now + 2500 + Math.random() * 3000; }
+    blink = Math.min(1, blink + 0.12);
+    root.y = window.innerHeight - R - 70 + Math.sin((now - t0) / 600) * 4;
+    face.position.set(look.x * 14, look.y * 8);
+
+    eyes.clear().beginFill(0xf3f1f8);
+    eyes.drawEllipse(-R * 0.35, -R * 0.1, 11, 16 * blink + 1);
+    eyes.drawEllipse(R * 0.35, -R * 0.1, 11, 16 * blink + 1);
+    eyes.endFill();
+
+    mouthG.clear().beginFill(0x2f86e0);
+    mouthG.drawEllipse(0, R * 0.3, 12, 3 + mouth * 13);
+    mouthG.endFill();
+  });
+
+  return {
+    view: root,
+    hitTest: (x, y) => root.getBounds().contains(x, y),
+    setMouth: (v) => { mouth = v; },
+    lookAt: (x, y) => {
+      const b = root.getBounds();
+      look = {
+        x: Math.max(-1, Math.min(1, (x - (b.x + b.width / 2)) / 200)),
+        y: Math.max(-1, Math.min(1, (y - (b.y + b.height / 2)) / 200)),
+      };
+    },
+  };
+}
+
+// ---------- 状態表示 ----------
+
+const STATUS_LABELS = {
+  listening: '聞いています…',
+  thinking: '考え中…',
+  speaking: '話しています',
+  loading: '音声認識を準備中…',
+};
+
+function setStatus(state) {
+  if (!state) {
+    statusEl.classList.add('hidden');
+    return;
+  }
+  statusEl.dataset.state = state;
+  statusText.textContent = STATUS_LABELS[state];
+  statusEl.classList.remove('hidden');
+}
+
+// ---------- 音声再生（VOICEVOX）と口パク ----------
+
+const audioCtx = new AudioContext();
+const analyser = audioCtx.createAnalyser();
+analyser.fftSize = 1024;
+analyser.connect(audioCtx.destination);
+const levelBuf = new Float32Array(analyser.fftSize);
+
+let speechQueue = [];     // { audio: Promise<Uint8Array> }
+let speechGen = 0;        // 中断用の世代番号
+let currentSource = null;
+let playing = false;
+let mouthLevel = 0;
+
+function voiceEnabled() {
+  return !!config.voice?.enabled;
+}
+
+function enqueueSpeech(text) {
+  const clean = text.replace(/[「」『』（）()…・\s]+/g, ' ').trim();
+  if (!voiceEnabled() || !/[\p{L}\p{N}]/u.test(clean)) return;
+  // 合成は先に投げておき、再生だけ順番に行う
+  speechQueue.push({ audio: window.mate.tts(clean).catch((err) => { console.warn(err); return null; }) });
+  if (!playing) playQueue(speechGen);
+}
+
+async function playQueue(gen) {
+  playing = true;
+  setStatus('speaking');
+  while (speechQueue.length && gen === speechGen) {
+    const data = await speechQueue.shift().audio;
+    if (!data || gen !== speechGen) continue;
+    try {
+      const buf = await audioCtx.decodeAudioData(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+      await new Promise((resolve) => {
+        const src = audioCtx.createBufferSource();
+        src.buffer = buf;
+        src.connect(analyser);
+        src.onended = resolve;
+        currentSource = src;
+        src.start();
+      });
+    } catch (err) {
+      console.warn('音声の再生に失敗しました', err);
+    }
+  }
+  currentSource = null;
+  playing = false;
+  if (gen === speechGen) onSpeechIdle();
+}
+
+function stopSpeaking() {
+  speechGen++;
+  speechQueue = [];
+  try { currentSource?.stop(); } catch {}
+  currentSource = null;
+  playing = false;
+}
+
+// 話し終わった（＝返事の生成も再生も終わった）ら、音声会話中なら次を聞きにいく
+function onSpeechIdle() {
+  if (generating || playing) return;
+  setStatus(null);
+  if (voiceMode) startListening();
+}
+
+app.ticker.add(() => {
+  if (!character) return;
+  let target = 0;
+  if (playing && currentSource) {
+    analyser.getFloatTimeDomainData(levelBuf);
+    let sum = 0;
+    for (const v of levelBuf) sum += v * v;
+    target = Math.min(1, Math.sqrt(sum / levelBuf.length) * 7);
+  } else if (generating && !voiceEnabled()) {
+    target = Math.abs(Math.sin(performance.now() / 90)) * 0.8;
+  }
+  mouthLevel += (target - mouthLevel) * 0.5;
+  character.setMouth(mouthLevel);
+});
+
+// ---------- 音声入力（マイク → Whisper） ----------
+
+let voiceMode = false;    // 音声会話モード（話し終わるたびに自動で聞く）
+let oneShot = false;      // ホットキーで 1 回だけ聞いている途中か
+let sttReady = false;
+let mic = null;           // 録音中のリソース
+
+// ホットキー：1 回だけ聞いて返事をする。聞いている途中にもう一度押すと取り消し
+function listenOnce() {
+  if (voiceMode) return; // 音声会話モード中はもともと聞いている
+  if (oneShot) {
+    oneShot = false;
+    stopListening();
+    if (!generating && !playing) setStatus(null);
+    return;
+  }
+  stopSpeaking();
+  audioCtx.resume();
+  oneShot = true;
+  startListening();
+}
+
+function setVoiceMode(on) {
+  voiceMode = on;
+  micBtn.classList.toggle('on', on);
+  if (on) {
+    toggleInput(true);
+    stopSpeaking();
+    startListening();
+  } else {
+    stopListening();
+    if (!generating && !playing) setStatus(null);
+  }
+}
+
+async function startListening() {
+  if (mic || !(voiceMode || oneShot)) return;
+  if (!sttReady) setStatus('loading');
+  else setStatus('listening');
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+  } catch (err) {
+    showBubble(`マイクが使えないみたいです。\n(${err.message})`);
+    oneShot = false;
+    setVoiceMode(false);
+    return;
+  }
+
+  const ctx = new AudioContext({ sampleRate: 16000 });
+  await ctx.resume();
+  console.log(`[mic] device="${stream.getAudioTracks()[0]?.label}" ctx=${ctx.state}/${ctx.sampleRate}Hz`);
+  const source = ctx.createMediaStreamSource(stream);
+  const proc = ctx.createScriptProcessor(1024, 1, 1);
+  const frameMs = (1024 / 16000) * 1000;
+  const preroll = [];
+  const chunks = [];
+  let noise = 0.005;
+  let voicedMs = 0;
+  let started = false;
+  let silentMs = 0;
+  let waitedMs = 0;
+  let peak = 0;
+  let logMs = 0;
+
+  const self = { stream, ctx };
+  mic = self;
+
+  proc.onaudioprocess = (e) => {
+    if (mic !== self) return; // 停止済みの録音から遅れて届いた分は捨てる
+    const data = new Float32Array(e.inputBuffer.getChannelData(0));
+    let sum = 0;
+    for (const v of data) sum += v * v;
+    const rms = Math.sqrt(sum / data.length);
+    const threshold = Math.max(config.stt.threshold ?? 0.008, noise * 2.5);
+    const voiced = rms > threshold;
+    if (!voiced) noise = noise * 0.95 + rms * 0.05;
+
+    levelBar.style.width = `${Math.min(100, (rms / 0.08) * 100)}%`;
+    peak = Math.max(peak, rms);
+    logMs += frameMs;
+    if (logMs >= 1000) {
+      console.log(`[mic] peak=${peak.toFixed(4)} noise=${noise.toFixed(4)} threshold=${threshold.toFixed(4)} started=${started}`);
+      peak = 0;
+      logMs = 0;
+    }
+
+    if (!started) {
+      preroll.push(data);
+      if (preroll.length > 6) preroll.shift();
+      voicedMs = voiced ? voicedMs + frameMs : 0;
+      waitedMs += frameMs;
+      if (voicedMs >= 190) {
+        started = true;
+        console.log('[mic] 発話を検出');
+        chunks.push(...preroll);
+      } else if (oneShot && waitedMs > 8000) {
+        // ホットキーで聞いたのに何も話さなければ取りやめる
+        oneShot = false;
+        stopListening();
+        setStatus(null);
+      } else if (waitedMs > 20000) {
+        // しばらく何も話さなければ音声会話を終える
+        setVoiceMode(false);
+        showBubble('声が聞こえなかったので、音声会話を終わりますね。', '');
+        hideBubbleLater(5000);
+      }
+      return;
+    }
+
+    chunks.push(data);
+    silentMs = voiced ? 0 : silentMs + frameMs;
+    if (silentMs > 900 || chunks.length * frameMs > 25000) finishUtterance(chunks);
+  };
+
+  source.connect(proc);
+  proc.connect(ctx.destination);
+}
+
+function stopListening() {
+  if (!mic) return;
+  mic.stream.getTracks().forEach((t) => t.stop());
+  mic.ctx.close();
+  mic = null;
+}
+
+async function finishUtterance(chunks) {
+  stopListening();
+  const total = chunks.reduce((n, c) => n + c.length, 0);
+  const samples = new Float32Array(total);
+  let off = 0;
+  for (const c of chunks) { samples.set(c, off); off += c.length; }
+
+  setStatus('thinking');
+  let text = '';
+  const t0 = performance.now();
+  try {
+    text = await window.mate.stt(samples);
+  } catch (err) {
+    console.error('[stt]', err);
+    showBubble(`うまく聞き取れませんでした。\n(${err.message})`);
+  }
+  console.log(`[stt] ${(samples.length / 16000).toFixed(1)}s -> "${text}" (${Math.round(performance.now() - t0)}ms)`);
+  const wasOneShot = oneShot;
+  oneShot = false;
+  if (!voiceMode && !wasOneShot) return; // 途中で取り消された
+  if (!text) {
+    showBubble('ごめん、うまく聞き取れませんでした。もう一度お願いします。', '');
+    hideBubbleLater(4000);
+    if (voiceMode) startListening();
+    else setStatus(null);
+    return;
+  }
+  ask(text);
+}
+
+micBtn.addEventListener('click', () => setVoiceMode(!voiceMode));
+
+window.mate.on('toggle-voice-chat', () => setVoiceMode(!voiceMode));
+window.mate.on('listen-once', listenOnce);
+
+window.mate.on('stt-status', ({ ready, error }) => {
+  sttReady = ready;
+  if (ready && mic) setStatus('listening');
+  if (error) {
+    showBubble(`音声認識を準備できませんでした。\n(${error})`);
+    setVoiceMode(false);
+  }
+});
+
+// ---------- マウス：クリック透過・ドラッグ移動・クリック ----------
+
+let ignoring = true;
+let drag = null;
+
+function setInteractive(on) {
+  if (on === !ignoring) return;
+  ignoring = !on;
+  window.mate.setIgnoreMouse(ignoring);
+}
+
+window.addEventListener('mousemove', (e) => {
+  character?.lookAt(e.clientX, e.clientY);
+
+  if (drag) {
+    const dx = e.screenX - drag.lastX;
+    const dy = e.screenY - drag.lastY;
+    drag.moved += Math.abs(dx) + Math.abs(dy);
+    drag.lastX = e.screenX;
+    drag.lastY = e.screenY;
+    if (dx || dy) window.mate.moveWindow(dx, dy);
+    return;
+  }
+
+  const overUi = !!e.target.closest?.('.ui');
+  const overChar = character?.hitTest(e.clientX, e.clientY);
+  setInteractive(overUi || overChar);
+});
+
+window.addEventListener('mousedown', (e) => {
+  audioCtx.resume();
+  if (e.button !== 0 || e.target.closest('.ui')) return;
+  if (!character?.hitTest(e.clientX, e.clientY)) return;
+  drag = { lastX: e.screenX, lastY: e.screenY, x: e.clientX, y: e.clientY, moved: 0 };
+});
+
+window.addEventListener('mouseup', () => {
+  if (!drag) return;
+  const { moved, x, y } = drag;
+  drag = null;
+  if (moved < 5) {
+    character.tap?.(x, y);
+    toggleInput();
+  }
+});
+
+window.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  window.mate.showMenu({ poses: character?.getPoses?.() });
+});
+
+// 立ち姿・足はキャラごとにこの PC に覚えておく
+const poseKey = () => `pose:${config.characterId}`;
+const legsKey = () => `legs:${config.characterId}`;
+
+window.mate.on('set-pose', (id) => {
+  character?.setPose?.(id);
+  try { localStorage.setItem(poseKey(), id); } catch {}
+});
+
+window.mate.on('set-legs', (id) => {
+  character?.setLegs?.(id);
+  try { localStorage.setItem(legsKey(), id); } catch {}
+});
+
+// ---------- 吹き出し・入力欄 ----------
+
+function toggleInput(show = inputBar.classList.contains('hidden')) {
+  inputBar.classList.toggle('hidden', !show);
+  if (show) input.focus();
+}
+
+function showBubble(text, you) {
+  clearTimeout(bubbleTimer);
+  if (you !== undefined) {
+    bubbleYou.textContent = you;
+    bubbleYou.classList.toggle('hidden', !you);
+  }
+  bubbleText.textContent = text;
+  bubble.classList.remove('hidden');
+  bubble.scrollTop = bubble.scrollHeight;
+}
+
+function hideBubbleLater(ms = 15000) {
+  clearTimeout(bubbleTimer);
+  bubbleTimer = setTimeout(() => bubble.classList.add('hidden'), ms);
+}
+
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') toggleInput(false);
+});
+
+inputBar.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = input.value.trim();
+  if (!text || generating) return;
+  input.value = '';
+  await ask(text);
+});
+
+// ---------- 会話 ----------
+
+let reply = '';
+let replyTagApplied = false;
+let spokenLen = 0;        // 本文のうち読み上げキューに入れ終わった文字数
+let expressionTimer = null;
+
+function systemPrompt() {
+  const tags = Object.keys(config.expressions || {});
+  if (!tags.length || !character?.setExpression) return config.persona;
+  return `${config.persona}\n\n返事の先頭には、そのときの気持ちに合うタグを必ず1つ付けてください。使えるタグ: ${tags.map((t) => `[${t}]`).join(' ')}\n例: [smile] おはよう、今日も早いですね。`;
+}
+
+// 返事の先頭の [tag] を取り出す。タグが書きかけの間は本文を空にしておく。
+// ツールを使うと返事が複数回に分かれて途中にもタグが出るので、それも本文から消す
+function splitTag(text) {
+  const m = text.match(/^\s*\[([a-z]+)\]\s*/i);
+  const tag = m ? m[1].toLowerCase() : null;
+  const body = (m ? text.slice(m[0].length) : text.trimStart())
+    .replace(/\s*\[[a-z]+\]\s*/gi, ' ')
+    .replace(/\[[a-z]*$/i, '');
+  return { tag, body: body.trimStart() };
+}
+
+// 文の区切りまで来た分を読み上げキューへ
+function speakCompletedSentences(body, flush = false) {
+  let rest = body.slice(spokenLen);
+  let m;
+  while ((m = rest.match(/^[\s\S]*?[。！？!?\n]+/))) {
+    enqueueSpeech(m[0]);
+    spokenLen += m[0].length;
+    rest = rest.slice(m[0].length);
+  }
+  if (flush && rest.trim()) {
+    enqueueSpeech(rest);
+    spokenLen += rest.length;
+  }
+}
+
+function finishReply() {
+  generating = false;
+  sendBtn.disabled = false;
+  hideBubbleLater(voiceMode ? 30000 : 15000);
+  clearTimeout(expressionTimer);
+  expressionTimer = setTimeout(() => character?.setExpression?.(config.expressions?.normal), 15000);
+  onSpeechIdle();
+}
+
+window.mate.on('chat-chunk', (d) => {
+  if (d.id !== currentChatId) return;
+  reply += d.text;
+  const { tag, body } = splitTag(reply);
+  if (tag && !replyTagApplied) {
+    replyTagApplied = true;
+    character?.setExpression?.(config.expressions?.[tag]);
+  }
+  showBubble(body || '…');
+  speakCompletedSentences(body);
+});
+
+window.mate.on('chat-done', (d) => {
+  if (d.id !== currentChatId) return;
+  speakCompletedSentences(splitTag(reply).body, true);
+  history.push({ role: 'assistant', content: reply.trim() });
+  finishReply();
+});
+
+window.mate.on('chat-error', (d) => {
+  if (d.id !== currentChatId) return;
+  history.pop(); // 失敗した発言は履歴から外す
+  showBubble(d.message);
+  finishReply();
+});
+
+async function ask(text) {
+  stopSpeaking();
+  history.push({ role: 'user', content: text });
+  history = history.slice(-config.maxHistory);
+
+  const id = ++currentChatId;
+  reply = '';
+  replyTagApplied = false;
+  spokenLen = 0;
+  generating = true;
+  sendBtn.disabled = true;
+  setStatus('thinking');
+  showBubble('…', text);
+
+  await window.mate.chat(id, [
+    { role: 'system', content: systemPrompt() },
+    ...history,
+  ]);
+}
+
+window.mate.on('reset-chat', () => {
+  stopSpeaking();
+  history = [];
+  showBubble('会話をリセットしました。', '');
+  hideBubbleLater(4000);
+});
+
+// ---------- 起動 ----------
+
+(async () => {
+  config = await window.mate.getConfig();
+  bubbleName.textContent = config.characterName;
+  for (const [k, v] of Object.entries(config.theme || {})) {
+    document.documentElement.style.setProperty(`--${k}`, v);
+  }
+  if (config.stt?.enabled) window.mate.sttWarmup();
+  else micBtn.classList.add('hidden');
+
+  try {
+    if (config.modelUrl && config.characterType === 'gltf') {
+      const canvas3d = document.getElementById('stage3d');
+      canvas.classList.add('hidden');
+      canvas3d.classList.remove('hidden');
+      const { createGltfCharacter } = await import('./three-character.js');
+      let savedPose = null;
+      let savedLegs = null;
+      try {
+        savedPose = localStorage.getItem(poseKey());
+        savedLegs = localStorage.getItem(legsKey());
+      } catch {}
+      character = await createGltfCharacter(canvas3d, config.modelUrl, {
+        ...config.model3d,
+        pose: savedPose || config.model3d?.pose,
+        legs: savedLegs || config.model3d?.legs,
+      });
+    } else {
+      character = config.modelUrl ? await loadLive2D(config.modelUrl) : createPlaceholder();
+    }
+  } catch (err) {
+    console.error(err);
+    canvas.classList.remove('hidden');
+    character = createPlaceholder();
+    showBubble(`Live2Dモデルを読み込めなかったので仮の姿でいます。\n(${err.message})`, '');
+    hideBubbleLater(10000);
+    return;
+  }
+  showBubble(`${config.characterName}です。クリックで話しかけてください。マイクボタンで声でも話せますよ。`, '');
+  hideBubbleLater(8000);
+})();

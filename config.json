@@ -1,0 +1,74 @@
+{
+  "activeCharacter": "default",
+  "ollamaUrl": "http://localhost:11434",
+  "ollamaModel": "qwen3:8b",
+  "maxHistory": 20,
+  "hotkeys": {
+    "listenOnce": "Control+Space",
+    "voiceChat": "CommandOrControl+Alt+V"
+  },
+  "apps": {
+    "youtube": {
+      "name": "YouTube",
+      "open": "https://www.youtube.com/",
+      "search": "https://www.youtube.com/results?search_query={query}"
+    },
+    "primevideo": {
+      "name": "Prime Video（プライムビデオ）",
+      "open": "https://www.amazon.co.jp/gp/video/storefront",
+      "search": "https://www.amazon.co.jp/s?k={query}&i=instant-video"
+    },
+    "x": {
+      "name": "X（旧Twitter）",
+      "open": "https://x.com/home",
+      "search": "https://x.com/search?q={query}"
+    },
+    "github": {
+      "name": "GitHub",
+      "open": "https://github.com/",
+      "search": "https://github.com/search?q={query}"
+    },
+    "claude": {
+      "name": "Claude（クロード）",
+      "open": "https://claude.ai/new",
+      "search": "https://claude.ai/new?q={query}"
+    }
+  },
+  "weather": {
+    "places": {
+      "東京": {
+        "lat": 35.6895,
+        "lon": 139.6917
+      },
+      "千葉": {
+        "lat": 35.6074,
+        "lon": 140.1065
+      }
+    }
+  },
+  "voice": {
+    "enabled": true,
+    "voicevoxUrl": "http://127.0.0.1:50021",
+    "speaker": 3,
+    "speedScale": 1.1,
+    "pitchScale": 0,
+    "intonationScale": 1.1,
+    "enginePath": ""
+  },
+  "stt": {
+    "enabled": true,
+    "model": "onnx-community/whisper-large-v3-turbo",
+    "device": "cpu",
+    "dtype": {
+      "encoder_model": "q8",
+      "decoder_model_merged": "q4"
+    }
+  },
+  "characters": {
+    "default": {
+      "characterName": "マスコット",
+      "characterType": "live2d",
+      "theme": {}
+    }
+  }
+}

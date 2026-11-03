@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>Desktop Mate</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- 3D モデル（three.js）は app.js から動的 import する -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "../node_modules/three/build/three.module.js",
+        "three/addons/": "../node_modules/three/examples/jsm/"
+      }
+    }
+  </script>
+  <!-- Live2D Cubism Core（Live2D社の公式配布物） -->
+  <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
+  <script src="../node_modules/pixi.js/dist/browser/pixi.min.js"></script>
+  <script src="../node_modules/pixi-live2d-display/dist/cubism4.min.js"></script>
+</head>
+<body>
+  <div id="bubble" class="ui hidden">
+    <div id="bubble-name"></div>
+    <div id="bubble-you" class="hidden"></div>
+    <div id="bubble-text"></div>
+  </div>
+
+  <canvas id="stage"></canvas>
+  <canvas id="stage3d" class="hidden"></canvas>
+
+  <div id="status" class="ui hidden"><span class="dot"></span><span id="status-text"></span><span id="level"><i></i></span></div>
+
+  <form id="input-bar" class="ui hidden">
+    <button type="button" id="mic" title="音声会話（Ctrl+Alt+V）">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93V21h2v-3.07A7 7 0 0 0 19 11h-2Z"/></svg>
+    </button>
+    <input id="input" type="text" placeholder="話しかける…" autocomplete="off">
+    <button type="submit" id="send" title="送信">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z"/></svg>
+    </button>
+  </form>
+
+  <script src="app.js"></script>
+</body>
+</html>

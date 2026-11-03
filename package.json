@@ -1,0 +1,19 @@
+{
+  "name": "desktop-mate",
+  "version": "0.1.0",
+  "description": "デスクトップ常駐型の会話AI（Live2D + Ollama）",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
+    "pixi-live2d-display": "0.4.0",
+    "pixi.js": "6.5.10",
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0"
+  },
+  "license": "MIT"
+}
