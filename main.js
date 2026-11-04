@@ -545,7 +545,6 @@ ipcMain.handle('tts', async (_e, text) => {
 
 let asrPromise = null;
 let asrReady = false;
-let asrFallback = false; // メモリが足りず、小さいモデルで動いているか
 let asrProgress = null; // セットアップ画面に読み込みの進み具合を知らせる
 
 function loadAsr() {
@@ -561,33 +560,24 @@ function loadAsr() {
       // 速さ・精度は変わらず、読み込み時の最大メモリが約 3.3GB → 1.9GB に減る（メモリ不足での読み込み失敗を防ぐ）
       session_options: { enableCpuMemArena: false, enableMemPattern: false },
     };
-    // メモリが一時的に足りないと "Protobuf parsing failed" で失敗するので、間をおいてもう一度やり直す
+    // メモリが一時的に足りないと "Protobuf parsing failed" で失敗するので、間をおいて何回かやり直す
     let lastErr;
-    for (const [i, device] of [config.stt.device, 'cpu'].entries()) {
+    for (const [i, device] of [config.stt.device, 'cpu', 'cpu'].entries()) {
       try {
-        if (i > 0) await new Promise((r) => setTimeout(r, 4000));
+        if (i > 0) await new Promise((r) => setTimeout(r, 5000));
         return await pipeline('automatic-speech-recognition', config.stt.model, { ...opts, device });
       } catch (err) {
         lastErr = err;
         console.warn(`[stt] 読み込みに失敗しました（${i + 1} 回目、${device}）`, err.message);
       }
     }
-    // それでもだめなら、小さいモデル（メモリ約 0.7GB。聞き取りは少し落ちる）に切り替えて、音声入力自体は使えるようにする
-    const fallback = config.stt.fallbackModel ?? 'onnx-community/whisper-small';
-    if (!fallback) throw lastErr;
-    console.warn(`[stt] メモリが足りないので、小さいモデル（${fallback}）で動かします`);
-    asrFallback = true;
-    return pipeline('automatic-speech-recognition', fallback, {
-      ...opts,
-      dtype: { encoder_model: 'q8', decoder_model_merged: 'q8' },
-      device: 'cpu',
-    });
+    throw lastErr;
   })();
   asrPromise.then(
     () => {
       asrReady = true;
       console.log('[stt] 音声認識モデルの準備完了');
-      win?.webContents.send('stt-status', { ready: true, fallback: asrFallback });
+      win?.webContents.send('stt-status', { ready: true });
     },
     (err) => {
       console.error('[stt] 読み込み失敗', err);

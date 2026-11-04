@@ -165,7 +165,6 @@ const UI_STRINGS = {
     voiceTimeout: '声が聞こえなかったので、音声会話を終わりますね。',
     sttError: (msg) => `うまく聞き取れませんでした。\n(${msg})`,
     sttEmpty: 'ごめん、うまく聞き取れませんでした。もう一度お願いします。',
-    sttFallback: 'パソコンのメモリが足りなかったので、軽い音声認識で動かしています。聞き間違いが増えるかも。ほかのアプリを閉じてから Deskroid を再起動すると、元の正確な音声認識に戻ります。',
     sttLoadFailed: '音声認識の準備に失敗しちゃいました。もう一度話しかけてみて、だめならアプリを再起動してください（パソコンのメモリが足りないときに起きることがあります）。',
     sttLoadError: (msg) => `音声認識を準備できませんでした。\n(${msg})`,
     tagInstruction: (tags) => `返事の先頭には、そのときの気持ちに合うタグを必ず1つ付けてください。使えるタグ: ${tags}\n例: [smile] おはよう、今日も早いですね。`,
@@ -182,7 +181,6 @@ const UI_STRINGS = {
     voiceTimeout: "I didn't hear anything, so I'll end the voice conversation.",
     sttError: (msg) => `I couldn't make that out.\n(${msg})`,
     sttEmpty: "Sorry, I didn't catch that. Could you say it again?",
-    sttFallback: "The PC was low on memory, so I'm using lighter speech recognition. I may mishear more often. Close some other apps and restart Deskroid to get the accurate one back.",
     sttLoadFailed: 'Speech recognition failed to load. Please try again, and if it still fails, restart the app (this can happen when the PC is low on memory).',
     sttLoadError: (msg) => `I couldn't prepare speech recognition.\n(${msg})`,
     tagInstruction: (tags) => `Always start your reply with exactly one tag that matches your mood. Available tags: ${tags}\nExample: [smile] Good morning, you're up early today.\nAlways reply in English.`,
@@ -485,13 +483,8 @@ micBtn.addEventListener('click', () => setVoiceMode(!voiceMode));
 window.mate.on('toggle-voice-chat', () => setVoiceMode(!voiceMode));
 window.mate.on('listen-once', listenOnce);
 
-window.mate.on('stt-status', ({ ready, error, fallback }) => {
+window.mate.on('stt-status', ({ ready, error }) => {
   sttReady = ready;
-  // メモリが足りず小さいモデルに切り替えたときは、聞き間違いが増えることを知らせる
-  if (ready && fallback) {
-    showBubble(ui().sttFallback, '');
-    hideBubbleLater(12000);
-  }
   if (ready && mic) setStatus('listening');
   if (error) {
     // モデルの読み込み失敗（メモリ不足など）は、生のエラーではなく「どうすればいいか」を伝える
