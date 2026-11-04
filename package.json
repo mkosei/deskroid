@@ -1,10 +1,16 @@
 {
   "name": "desktop-mate",
   "version": "0.1.0",
-  "description": "デスクトップ常駐型の会話AI（Live2D + Ollama）",
+  "description": "デスクトップ常駐型の会話AI（Live2D / 3D キャラ・Ollama・VOICEVOX・Whisper）",
+  "author": "mkosei",
+  "homepage": "https://github.com/mkosei/desktop_ai",
+  "repository": "github:mkosei/desktop_ai",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dist": "electron-builder --publish never",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:mac": "electron-builder --mac --publish never"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
@@ -13,7 +19,76 @@
     "three": "^0.169.0"
   },
   "devDependencies": {
-    "electron": "^38.0.0"
+    "electron": "^38.0.0",
+    "electron-builder": "^26.18.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "build": {
+    "appId": "com.mkosei.desktopai",
+    "productName": "DesktopAI",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!models/**",
+      "!scripts/**",
+      "!dist/**",
+      "!config.local.json",
+      "!*.log",
+      "!CLAUDE.md",
+      "!README.md",
+      "!.github/**"
+    ],
+    "asarUnpack": [
+      "node_modules/onnxruntime-node/**",
+      "node_modules/sharp/**",
+      "node_modules/@img/**"
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "mkosei",
+      "repo": "desktop_ai",
+      "releaseType": "release"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "files": [
+        "!node_modules/onnxruntime-node/bin/napi-v3/{darwin,linux}/**"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "デスクトップAI",
+      "artifactName": "DesktopAI-Setup-${version}.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["arm64", "x64"]
+        }
+      ],
+      "category": "public.app-category.productivity",
+      "identity": null,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "声でキャラに話しかけるためにマイクを使います。"
+      },
+      "files": [
+        "!node_modules/onnxruntime-node/bin/napi-v3/{win32,linux}/**"
+      ]
+    },
+    "dmg": {
+      "artifactName": "DesktopAI-${version}-${arch}.${ext}"
+    }
+  }
 }

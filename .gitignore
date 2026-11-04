@@ -1,5 +1,6 @@
 node_modules/
 *.log
+dist/
 
 # この PC だけの設定（読み込んだキャラ・選択中のキャラなど）
 config.local.json

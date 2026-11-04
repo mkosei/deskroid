@@ -19,17 +19,49 @@
 
 ## 必要なもの
 
-- Windows 10 / 11
-- [Node.js](https://nodejs.org/) LTS
-- [Ollama](https://ollama.com/) と会話用モデル
+- Windows 10 / 11、または macOS（Apple シリコン・Intel）
+- [Ollama](https://ollama.com/) と会話用モデル（初回セットアップの画面から準備できます）
 - [VOICEVOX](https://voicevox.hiroshiba.jp/)（声で話させたいときだけ。一度起動しておけば、以降はアプリが裏でエンジンを起動します）
-- 会話用モデルを快適に動かすには、VRAM 8GB 以上の GPU があると安心です
-
-```bash
-ollama pull qwen3:8b
-```
+- 会話用モデルを快適に動かすには、VRAM 8GB 以上の GPU、または Apple シリコンの Mac があると安心です
 
 ## インストール
+
+[Releases](https://github.com/mkosei/desktop_ai/releases) から、使っている OS のインストーラーをダウンロードします。
+
+| OS | ファイル |
+|---|---|
+| Windows | `DesktopAI-Setup-<バージョン>.exe` |
+| Mac（Apple シリコン：M1 以降） | `DesktopAI-<バージョン>-arm64.dmg` |
+| Mac（Intel） | `DesktopAI-<バージョン>-x64.dmg` |
+
+- **Windows**：ダブルクリックしてインストールします。「Windows によって PC が保護されました」と出たら、「詳細情報」→「実行」を押してください（署名をしていないアプリのため）。
+  デスクトップとスタートメニューに「デスクトップAI」ができます
+- **Mac**：dmg を開いて、アプリを「アプリケーション」フォルダへドラッグします。
+  署名をしていないアプリなので、初回は Finder でアプリを右クリック →「開く」を選んでください。
+  それでも開けないときは、ターミナルで次を実行します
+
+```bash
+xattr -dr com.apple.quarantine /Applications/DesktopAI.app
+```
+
+### 初回セットアップ
+
+初めて起動すると「セットアップ」の画面が出て、必要なものがそろっているか確認します。足りないものはボタンから準備できます。
+
+| 項目 | 内容 |
+|---|---|
+| Ollama | 入っていなければダウンロードページを開きます。入っていて止まっていれば起動します |
+| 会話モデル | 入っていなければ、進み具合を見ながらダウンロードできます（`qwen3:8b` は約 5GB） |
+| VOICEVOX（任意） | 声で話させるときに使います。入っていなければダウンロードページを開きます |
+| マイク | Mac では、ここでマイクの使用を許可します |
+| 音声認識モデル（任意） | 声で話しかけるときに使います（約 1GB）。初めて声で話しかけたときにも自動で準備されます |
+
+そろったら「はじめる」を押すとキャラが出てきます。あとから右クリック →「セットアップ」でいつでも開けます。
+Ollama につながらないときも、起動時に自動でこの画面が出ます。
+
+## ソースから動かす（開発する人向け）
+
+[Node.js](https://nodejs.org/) LTS が必要です。
 
 ```bash
 git clone https://github.com/mkosei/desktop_ai.git
@@ -40,8 +72,13 @@ cd desktop_ai
 ```bash
 npm install
 ```
+```bash
+npm start
+```
 
-`npm install` のあと `node_modules\electron\dist\electron.exe` が無い場合は、npm がインストールスクリプトを止めています。
+Windows なら `start.bat` をダブルクリックしても起動できます。
+
+`npm install` のあと `node_modules/electron/dist` に Electron 本体が無い場合は、npm がインストールスクリプトを止めています。
 npm の表示に従って Electron のスクリプトを許可し、入れ直してください。
 
 ```bash
@@ -51,15 +88,14 @@ npm install-scripts approve electron
 npm rebuild electron
 ```
 
-## 起動
-
-`start.bat` をダブルクリックするか、次のコマンドで起動します。
+### インストーラーを作る
 
 ```bash
-npm start
+npm run dist
 ```
 
-初めて声で話しかけたときは、音声認識モデル（約 1GB）のダウンロードがあるので少し時間がかかります。
+`dist/` にインストーラーができます（Windows では `.exe`、Mac では `.dmg`）。Mac 用は Mac の上でしか作れません。
+`v0.2.0` のようなタグを push すると、GitHub Actions が Windows と Mac の両方のインストーラーを作って Releases に置きます。
 
 ## 使い方
 
@@ -68,8 +104,8 @@ npm start
 | キャラを左クリック | 入力欄を出す／しまう（反応して動く） |
 | キャラをドラッグ | 好きな場所へ移動 |
 | キャラを右クリック | メニュー（下の表） |
-| `Ctrl+Space` | 1 回だけ声を聞いて返事をする（聞いている途中にもう一度押すと取り消し） |
-| `Ctrl+Alt+V` / マイクボタン | 音声会話モードの ON/OFF（話し終わるたびに自動でまた聞く） |
+| `Ctrl+Space`（Mac は `Option+Space`） | 1 回だけ声を聞いて返事をする（聞いている途中にもう一度押すと取り消し） |
+| `Ctrl+Alt+V`（Mac は `Command+Option+V`）/ マイクボタン | 音声会話モードの ON/OFF（話し終わるたびに自動でまた聞く） |
 
 右クリックメニュー：
 
@@ -99,7 +135,7 @@ npm start
 | 3D | `*.vrm` / `*.glb` | 1 ファイルのままコピーされます |
 | 3D | `*.gltf` | テクスチャなどを参照するので、フォルダごとコピーされます |
 
-選んだモデルは `models/<名前>/` にコピーされ、キャラとして追加されて、そのキャラに切り替わります。
+選んだモデルはデータフォルダ（下の「設定ファイル」を参照）の `models/<名前>/` にコピーされ、キャラとして追加されて、そのキャラに切り替わります。
 
 自動でやってくれること：
 
@@ -130,15 +166,26 @@ npm start
 
 ## 設定ファイル
 
-- `config.json`：共通の設定（会話モデル、ホットキー、開けるサイト、天気の地域、音声認識など）
-- `config.local.json`：この PC だけの設定（読み込んだキャラ、選択中のキャラ）。`config.json` より優先されます
+- `config.json`：共通の設定（会話モデル、ホットキー、開けるサイト、天気の地域、音声認識など）。アプリに同梱されています
+- `config.local.json`：この PC だけの設定（読み込んだキャラ、選択中のキャラ、セットアップ済みか）。`config.json` より優先されるので、
+  共通の設定を変えたいときも、同じ項目をここに書けば上書きできます
 
-`config.json` の主な項目：
+`config.local.json` と読み込んだモデル（`models/`）の置き場所（データフォルダ）：
+
+| 動かし方 | 場所 |
+|---|---|
+| インストーラーで入れた（Windows） | `%APPDATA%\desktop-mate` |
+| インストーラーで入れた（Mac） | `~/Library/Application Support/desktop-mate` |
+| ソースから動かしている | アプリのフォルダ |
+
+右クリック →「キャラ設定を開く」で、`config.local.json` をすぐ開けます。
+
+主な項目：
 
 | 項目 | 内容 |
 |---|---|
 | `ollamaModel` | 会話に使う Ollama のモデル（例：`qwen3:14b`） |
-| `hotkeys` | `listenOnce`（1 回だけ聞く）と `voiceChat`（音声会話 ON/OFF）のキー |
+| `hotkeys` | `listenOnce`（1 回だけ聞く）と `voiceChat`（音声会話 ON/OFF）のキー。`{ "win": "Control+Space", "mac": "Alt+Space" }` のように OS ごとにも書けます |
 | `apps` | 開けるサイト・アプリ。`open` に URL かパス、`search` に `{query}` 入りの検索 URL |
 | `weather.places` | 天気を調べる地域（地名と緯度・経度） |
 | `voice` | VOICEVOX の URL・話者 ID・話速など |

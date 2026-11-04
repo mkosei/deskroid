@@ -4,7 +4,10 @@
   "ollamaModel": "qwen3:8b",
   "maxHistory": 20,
   "hotkeys": {
-    "listenOnce": "Control+Space",
+    "listenOnce": {
+      "win": "Control+Space",
+      "mac": "Alt+Space"
+    },
     "voiceChat": "CommandOrControl+Alt+V"
   },
   "apps": {

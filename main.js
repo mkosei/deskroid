@@ -1,16 +1,36 @@
 const { app, BrowserWindow, ipcMain, Menu, screen, globalShortcut, shell, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { spawn } = require('child_process');
 const { pathToFileURL } = require('url');
 const { ROUTER_PROMPT, buildTools, runTool, resultNote } = require('./tools');
 const { MODEL_FILTERS, importModel, defaultPersona } = require('./model-import');
+const setup = require('./setup');
 
-// config.json は共通の設定（リポジトリで共有）、config.local.json はこの PC だけの設定
-// （読み込んだキャラ、選択中のキャラなど）。local の方が優先される
+const IS_MAC = process.platform === 'darwin';
+
+// config.json は共通の設定（アプリに同梱）、config.local.json はこの PC だけの設定
+// （読み込んだキャラ、選択中のキャラなど）。local の方が優先される。
+// インストールしたアプリは自分のフォルダに書き込めないので、local 設定と読み込んだモデルは
+// ユーザーごとのフォルダ（Windows: %APPDATA%、Mac: ~/Library/Application Support）に置く
+const DATA_DIR = app.isPackaged ? app.getPath('userData') : __dirname;
 const CONFIG_PATH = path.join(__dirname, 'config.json');
-const LOCAL_CONFIG_PATH = path.join(__dirname, 'config.local.json');
+const LOCAL_CONFIG_PATH = path.join(DATA_DIR, 'config.local.json');
 const MERGED_KEYS = ['voice', 'stt', 'hotkeys', 'apps', 'weather'];
+const DEFAULT_HOTKEYS = {
+  listenOnce: IS_MAC ? 'Alt+Space' : 'Control+Space',
+  voiceChat: 'CommandOrControl+Alt+V',
+};
+
+// ホットキーは "Control+Space" のような文字列か、OS ごとの { "win": ..., "mac": ... }
+const hotkeyFor = (v) => (v && typeof v === 'object' ? v[IS_MAC ? 'mac' : 'win'] : v);
+
+// 読み込んだモデル（DATA_DIR/models）と、同梱・開発用のモデル（アプリのフォルダ/models）の両方を探す
+function resolveModelPath(p) {
+  if (path.isAbsolute(p)) return p;
+  return [path.join(DATA_DIR, p), path.join(__dirname, p)].find((f) => fs.existsSync(f)) || path.join(DATA_DIR, p);
+}
 const WIN_W = 400;
 const WIN_H = 620;
 
@@ -25,6 +45,7 @@ function readLocalConfig() {
 
 function writeLocalConfig(update) {
   const local = { ...readLocalConfig(), ...update };
+  fs.mkdirSync(path.dirname(LOCAL_CONFIG_PATH), { recursive: true });
   fs.writeFileSync(LOCAL_CONFIG_PATH, `${JSON.stringify(local, null, 2)}\n`);
 }
 
@@ -47,11 +68,12 @@ function loadConfig() {
   };
   config.characterName ||= 'マスコット';
   config.persona ||= defaultPersona(config.characterName, !!config.voice.enabled);
+  config.hotkeys = Object.fromEntries(
+    Object.entries({ ...DEFAULT_HOTKEYS, ...config.hotkeys }).map(([k, v]) => [k, hotkeyFor(v)]),
+  );
   let modelUrl = '';
   if (config.modelPath) {
-    const abs = path.isAbsolute(config.modelPath)
-      ? config.modelPath
-      : path.join(__dirname, config.modelPath);
+    const abs = resolveModelPath(config.modelPath);
     if (fs.existsSync(abs)) modelUrl = pathToFileURL(abs).href;
     else console.warn('モデルが見つかりません:', abs);
   }
@@ -108,7 +130,7 @@ async function importModelFromDialog() {
   if (canceled || !filePaths[0]) return;
   try {
     const taken = new Set(Object.keys(rawConfig.characters || {}));
-    const { id, entry } = importModel(filePaths[0], __dirname, taken, !!rawConfig.voice?.enabled);
+    const { id, entry } = importModel(filePaths[0], DATA_DIR, taken, !!rawConfig.voice?.enabled);
     const local = readLocalConfig();
     writeLocalConfig({ characters: { ...local.characters, [id]: entry }, activeCharacter: id });
     await dialog.showMessageBox(win, {
@@ -169,7 +191,7 @@ ipcMain.on('show-menu', (event, extra) => {
         click: () => event.sender.send('set-legs', id),
       })),
     }] : []),
-    { label: '音声会話 ON/OFF（Ctrl+Alt+V）', click: () => event.sender.send('toggle-voice-chat') },
+    { label: `音声会話 ON/OFF（${config.hotkeys.voiceChat || 'ホットキーなし'}）`, click: () => event.sender.send('toggle-voice-chat') },
     { label: '会話をリセット', click: () => event.sender.send('reset-chat') },
     {
       label: '常に最前面',
@@ -180,6 +202,7 @@ ipcMain.on('show-menu', (event, extra) => {
     { type: 'separator' },
     { label: 'モデルを読み込む…', click: () => importModelFromDialog() },
     { label: 'キャラ設定を開く', click: () => openLocalConfig() },
+    { label: 'セットアップ（Ollama・声・マイクの確認）', click: () => openSetupWindow() },
     { label: '設定を再読み込み', click: () => win.reload() },
     { type: 'separator' },
     { label: '終了', click: () => app.quit() },
@@ -267,15 +290,24 @@ ipcMain.handle('chat', async (event, { id, messages }) => {
 
 let voicevoxProc = null;
 
+// VOICEVOX エンジン（run / run.exe）を探す。エディタを一度起動すると vvpp-engines に展開される
 function findVoicevoxEngine() {
   if (config.voice?.enginePath && fs.existsSync(config.voice.enginePath)) return config.voice.enginePath;
-  const root = path.join(process.env.APPDATA || '', 'voicevox', 'vvpp-engines');
-  if (!fs.existsSync(root)) return null;
-  for (const dir of fs.readdirSync(root)) {
-    const exe = path.join(root, dir, 'run.exe');
-    if (fs.existsSync(exe)) return exe;
+  const exeName = IS_MAC ? 'run' : 'run.exe';
+  const roots = IS_MAC
+    ? [path.join(os.homedir(), 'Library', 'Application Support', 'voicevox', 'vvpp-engines')]
+    : [path.join(process.env.APPDATA || '', 'voicevox', 'vvpp-engines')];
+  for (const root of roots) {
+    if (!fs.existsSync(root)) continue;
+    for (const dir of fs.readdirSync(root)) {
+      const exe = path.join(root, dir, exeName);
+      if (fs.existsSync(exe)) return exe;
+    }
   }
-  return null;
+  const bundled = IS_MAC
+    ? '/Applications/VOICEVOX.app/Contents/Resources/vv-engine/run'
+    : path.join(process.env.LOCALAPPDATA || '', 'Programs', 'VOICEVOX', 'vv-engine', 'run.exe');
+  return fs.existsSync(bundled) ? bundled : null;
 }
 
 async function voicevoxReady() {
@@ -322,6 +354,8 @@ ipcMain.handle('tts', async (_e, text) => {
 // ---------- 音声認識（Whisper / transformers.js） ----------
 
 let asrPromise = null;
+let asrReady = false;
+let asrProgress = null; // セットアップ画面に読み込みの進み具合を知らせる
 
 function loadAsr() {
   if (asrPromise) return asrPromise;
@@ -329,7 +363,10 @@ function loadAsr() {
     const { pipeline, env } = await import('@huggingface/transformers');
     // node_modules 配下だと Windows のパス長制限(260文字)を超えるので短い場所に置く
     env.cacheDir = path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'desktop-mate', 'hf-cache');
-    const opts = { dtype: config.stt.dtype || { encoder_model: 'q8', decoder_model_merged: 'q4' } };
+    const opts = {
+      dtype: config.stt.dtype || { encoder_model: 'q8', decoder_model_merged: 'q4' },
+      progress_callback: (p) => asrProgress?.(p),
+    };
     try {
       return await pipeline('automatic-speech-recognition', config.stt.model, { ...opts, device: config.stt.device });
     } catch (err) {
@@ -339,6 +376,7 @@ function loadAsr() {
   })();
   asrPromise.then(
     () => {
+      asrReady = true;
       console.log('[stt] 音声認識モデルの準備完了');
       win?.webContents.send('stt-status', { ready: true });
     },
@@ -366,27 +404,93 @@ ipcMain.handle('stt-warmup', () => {
   if (config.stt?.enabled) loadAsr().catch(() => {});
 });
 
+// ---------- 初回セットアップ ----------
+
+let setupWin = null;
+
+function setupContext() {
+  return {
+    config,
+    isMac: IS_MAC,
+    findVoicevoxEngine,
+    voicevoxReady,
+    startVoicevox: async () => {
+      const wasEnabled = config.voice.enabled;
+      config.voice.enabled = true; // 声なしのキャラでも、確認のために起動はできるように
+      try { await ensureVoicevox(); } finally { config.voice.enabled = wasEnabled; }
+    },
+    asr: {
+      isReady: () => asrReady,
+      load: (onProgress) => { asrProgress = onProgress; return loadAsr(); },
+    },
+  };
+}
+
+function openSetupWindow() {
+  if (setupWin) {
+    setupWin.show();
+    setupWin.focus();
+    return;
+  }
+  setupWin = new BrowserWindow({
+    width: 560,
+    height: 800,
+    title: 'セットアップ',
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'setup-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  setupWin.loadFile(path.join(__dirname, 'renderer', 'setup.html'));
+  setupWin.on('closed', () => {
+    setupWin = null;
+    // 初回はセットアップを閉じたらキャラを出す
+    if (!win) createWindow();
+  });
+}
+
+ipcMain.handle('setup:check', () => setup.checkAll(setupContext()));
+ipcMain.handle('setup:action', (event, name) => setup.runAction(name, setupContext(), (p) => {
+  if (!event.sender.isDestroyed()) event.sender.send('setup:progress', p);
+}));
+ipcMain.handle('setup:done', () => {
+  writeLocalConfig({ setupDone: true });
+  setupWin?.close();
+});
+
 // 二重起動しない（すでに動いていれば、そちらを前に出すだけ）
 if (!app.requestSingleInstanceLock()) app.quit();
 app.on('second-instance', () => { win?.showInactive(); win?.moveTop(); });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   loadConfig();
-  createWindow();
+
+  // 初めて起動したとき、または Ollama につながらないときはセットアップ画面を出す
+  const firstRun = !readLocalConfig().setupDone;
+  const ollamaOk = await setup.ollamaReachable(config.ollamaUrl);
+  if (firstRun) {
+    openSetupWindow();
+  } else {
+    createWindow();
+    if (!ollamaOk) openSetupWindow();
+  }
   ensureVoicevox();
+
   // ホットキー（config.json の hotkeys で変更できる）
-  const hotkeys = {
-    listenOnce: 'Control+Space',
-    voiceChat: 'CommandOrControl+Alt+V',
-    ...config.hotkeys,
-  };
   const actions = { listenOnce: 'listen-once', voiceChat: 'toggle-voice-chat' };
-  for (const [name, accel] of Object.entries(hotkeys)) {
+  for (const [name, accel] of Object.entries(config.hotkeys)) {
     if (!accel || !actions[name]) continue;
     const ok = globalShortcut.register(accel, () => win?.webContents.send(actions[name]));
     if (!ok) console.warn(`ホットキーを登録できませんでした（他のアプリが使用中かも）: ${name}=${accel}`);
   }
 });
 
-app.on('window-all-closed', () => app.quit());
+// Mac ではウィンドウを全部閉じてもアプリを終わらせないのが普通だが、
+// このアプリはキャラの窓が本体なので、どちらの OS でも閉じたら終了する
+// （初回はセットアップを閉じた直後にキャラの窓を作るので、そのときは終了しない）
+app.on('window-all-closed', () => {
+  if (!win || win.isDestroyed()) app.quit();
+});
 app.on('quit', () => voicevoxProc?.kill());
