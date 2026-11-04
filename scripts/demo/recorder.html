@@ -1,0 +1,138 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>rec</title>
+<style>html,body{margin:0;background:#0d0e17}canvas{display:block}</style>
+</head><body>
+<canvas id="c" width="1280" height="720"></canvas>
+<script>
+// 画面の一部（キャラのまわり）を切り抜き、左に説明の文字を描いて MP4 に録画する
+const { ipcRenderer } = require('electron');
+const c = document.getElementById('c');
+const g = c.getContext('2d');
+const BG = '#0d0e17';
+let video = null;
+let crop = null;          // { sx, sy, sw, sh }（画面の物理ピクセル）
+let state = { mode: 'title', caption: '', sub: '', note: '' };
+let iconImg = new Image();
+
+ipcRenderer.on('state', (_e, s) => { state = { ...state, ...s, since: performance.now() }; });
+// 吹き出しで窓が上へ伸びたら、切り抜く範囲もなめらかに追いかける
+let cropTop = null;
+ipcRenderer.on('win-top', (_e, top) => { targetTop = top; });
+let targetTop = null;
+
+function wrap(text, x, y, maxW, lh) {
+  let line = '';
+  for (const ch of text) {
+    if (g.measureText(line + ch).width > maxW && line) { g.fillText(line, x, y); y += lh; line = ch; } else line += ch;
+  }
+  if (line) g.fillText(line, x, y);
+  return y + lh;
+}
+
+function draw() {
+  const t = performance.now();
+  g.fillStyle = BG;
+  g.fillRect(0, 0, 1280, 720);
+  // 背景にうっすらグラデーション
+  const grad = g.createRadialGradient(900, 360, 50, 900, 360, 700);
+  grad.addColorStop(0, 'rgba(91,110,225,0.10)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 1280, 720);
+
+  // キャラのまわりを右側に置く
+  if (video && crop && video.readyState >= 2) {
+    if (targetTop !== null) cropTop = cropTop === null ? targetTop : cropTop + (targetTop - cropTop) * 0.12;
+    const sy = cropTop ?? crop.sy;
+    const dh = 720;
+    const dw = crop.sw * (dh / crop.sh);
+    g.drawImage(video, crop.sx, sy, crop.sw, crop.sh, 1280 - dw - 30, 0, dw, dh);
+  }
+
+  const fade = Math.min(1, (t - (state.since || 0)) / 400);
+  if (state.mode === 'title' || state.mode === 'end') {
+    // 全面の文字（はじめ・おわり）
+    g.fillStyle = `rgba(13,14,23,${state.mode === 'title' ? 0.88 : 0.82})`;
+    g.fillRect(0, 0, 1280, 720);
+    g.globalAlpha = fade;
+    if (iconImg.complete) g.drawImage(iconImg, 640 - 56, state.mode === 'title' ? 170 : 120, 112, 112);
+    g.textAlign = 'center';
+    g.fillStyle = '#ffffff';
+    g.font = '700 64px "Yu Gothic UI", sans-serif';
+    g.fillText('Deskroid', 640, state.mode === 'title' ? 360 : 310);
+    g.fillStyle = '#c9cdf6';
+    g.font = '500 28px "Yu Gothic UI", sans-serif';
+    g.fillText(state.caption, 640, state.mode === 'title' ? 420 : 370);
+    if (state.sub) {
+      g.fillStyle = '#9aa0c8';
+      g.font = '400 22px "Yu Gothic UI", sans-serif';
+      state.sub.split('\n').forEach((l, i) => g.fillText(l, 640, (state.mode === 'title' ? 470 : 430) + i * 36));
+    }
+    if (state.note) {
+      g.fillStyle = '#6f7398';
+      g.font = '400 16px "Yu Gothic UI", sans-serif';
+      state.note.split('\n').forEach((l, i) => g.fillText(l, 640, 640 + i * 24));
+    }
+    g.textAlign = 'left';
+    g.globalAlpha = 1;
+  } else {
+    // 左側の説明
+    if (iconImg.complete) g.drawImage(iconImg, 70, 70, 52, 52);
+    g.fillStyle = '#ffffff';
+    g.font = '700 30px "Yu Gothic UI", sans-serif';
+    g.fillText('Deskroid', 136, 106);
+    g.globalAlpha = fade;
+    g.fillStyle = '#8f9cf5';
+    g.font = '700 20px "Yu Gothic UI", sans-serif';
+    g.fillText(state.step || '', 72, 250);
+    g.fillStyle = '#ffffff';
+    g.font = '700 40px "Yu Gothic UI", sans-serif';
+    const y = wrap(state.caption, 72, 305, 440, 54);
+    g.fillStyle = '#b5b9da';
+    g.font = '400 22px "Yu Gothic UI", sans-serif';
+    let y2 = y + 6;
+    for (const l of (state.sub || '').split('\n')) y2 = wrap(l, 72, y2, 440, 36);
+    if (state.note) {
+      // コピーした文章などの見本
+      g.fillStyle = 'rgba(255,255,255,0.06)';
+      g.fillRect(72, y2 + 10, 440, 130);
+      g.fillStyle = '#9aa0c8';
+      g.font = '400 18px "Yu Gothic UI", sans-serif';
+      wrap(state.note, 92, y2 + 44, 400, 28);
+    }
+    g.globalAlpha = 1;
+    g.fillStyle = '#5c6088';
+    g.font = '400 16px "Yu Gothic UI", sans-serif';
+    g.fillText('ローカルで動く・無料・オープンソース', 72, 670);
+  }
+
+}
+
+ipcRenderer.on('start', async (_e, { sourceId, crop: cr, icon }) => {
+  crop = cr;
+  iconImg.src = icon;
+  const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+  video = document.createElement('video');
+  video.srcObject = new MediaStream(stream.getVideoTracks());
+  video.muted = true;
+  await video.play();
+  // 隠した窓では requestAnimationFrame がほぼ止まるので、タイマーで 30 fps で描く
+  setInterval(draw, 1000 / 30);
+
+
+  const out = c.captureStream(30);
+  for (const tr of stream.getAudioTracks()) out.addTrack(tr);
+  const type = 'video/mp4;codecs=avc1.640028,mp4a.40.2';
+  const rec = new MediaRecorder(out, { mimeType: type, videoBitsPerSecond: 8_000_000, audioBitsPerSecond: 192_000 });
+  const chunks = [];
+  rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+  rec.onstop = async () => {
+    const buf = new Uint8Array(await new Blob(chunks, { type }).arrayBuffer());
+    ipcRenderer.send('saved', buf);
+  };
+  ipcRenderer.on('stop', () => rec.stop());
+  rec.start(1000);
+  ipcRenderer.send('recording');
+});
+</script>
+</body></html>
