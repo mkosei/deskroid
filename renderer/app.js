@@ -548,7 +548,7 @@ function finishReply() {
   sendBtn.disabled = false;
   hideBubbleLater(voiceMode ? 30000 : 15000);
   clearTimeout(expressionTimer);
-  expressionTimer = setTimeout(() => character?.setExpression?.(config.expressions?.normal), 15000);
+  expressionTimer = setTimeout(() => character?.setExpression?.(config.expressions?.normal, 'normal'), 15000);
   onSpeechIdle();
 }
 
@@ -558,7 +558,7 @@ window.mate.on('chat-chunk', (d) => {
   const { tag, body } = splitTag(reply);
   if (tag && !replyTagApplied) {
     replyTagApplied = true;
-    character?.setExpression?.(config.expressions?.[tag]);
+    character?.setExpression?.(config.expressions?.[tag], tag);
   }
   showBubble(body || '…');
   speakCompletedSentences(body);

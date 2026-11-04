@@ -1,8 +1,10 @@
-// glTF / GLB の 3D モデルを表示するキャラクター。app.js の character と同じ形のオブジェクトを返す
+// glTF / GLB / VRM の 3D モデルを表示するキャラクター。app.js の character と同じ形のオブジェクトを返す
+// - VRM: 規格のボーン・表情（まばたき・笑顔・口の形）・視線・髪や服の揺れを使う
 // - ボーン入りモデル（opts.rig あり）: 首・頭・目・胸・腕・口のボーンを動かす
 // - ボーンの無い「置物」モデル（opts.headNodes）: 頭まわりの部品をまとめて回す
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const ease = (p) => (p < 0.5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2);
@@ -109,6 +111,51 @@ function autoDetectRig(model) {
   return rig;
 }
 
+// ---------- VRM ----------
+
+// VRM は規格でボーンの役割が決まっているので、名前を推測せずにそのまま使う。
+// 目は VRM の視線（lookAt）に任せるので含めない
+const VRM_RIG_BONES = [
+  'hips', 'spine', 'neck', 'head',
+  'leftUpperArm', 'leftLowerArm', 'leftHand', 'rightUpperArm', 'rightLowerArm', 'rightHand',
+  'leftUpperLeg', 'leftLowerLeg', 'leftFoot', 'rightUpperLeg', 'rightLowerLeg', 'rightFoot',
+];
+
+function vrmRig(vrm) {
+  const rig = {};
+  for (const name of VRM_RIG_BONES) {
+    const node = vrm.humanoid.getRawBoneNode(name);
+    if (node) rig[name] = node;
+  }
+  const chest = vrm.humanoid.getRawBoneNode('chest') || vrm.humanoid.getRawBoneNode('upperChest');
+  if (chest) rig.chest = chest;
+  return rig;
+}
+
+const VRM_FINGERS = [
+  ['ThumbMetacarpal', 'ThumbProximal', 'ThumbDistal'],
+  ['IndexProximal', 'IndexIntermediate', 'IndexDistal'],
+  ['MiddleProximal', 'MiddleIntermediate', 'MiddleDistal'],
+  ['RingProximal', 'RingIntermediate', 'RingDistal'],
+  ['LittleProximal', 'LittleIntermediate', 'LittleDistal'],
+];
+
+function vrmFingers(vrm, side) {
+  const chains = VRM_FINGERS.map((names) => names
+    .map((n) => vrm.humanoid.getRawBoneNode(`${side}${n}`)).filter(Boolean));
+  return chains.every((c) => c.length >= 2) ? chains : [];
+}
+
+// 感情タグ → VRM の表情（名前, 強さ）。VRM 0.x の joy / sorrow / fun は three-vrm が happy / sad / relaxed に読み替える
+const VRM_FACES = {
+  smile: [['happy', 1]],
+  angry: [['angry', 0.9]],
+  sad: [['sad', 0.9]],
+  surprised: [['surprised', 1], ['aa', 0.3]],
+  shy: [['happy', 0.4], ['relaxed', 0.4]],
+};
+const VRM_FACE_NAMES = ['happy', 'angry', 'sad', 'surprised', 'relaxed'];
+
 // 手のボーンの直下から、親指〜小指の付け根を名前で探し、3 節ずつたどる
 function autoDetectFingers(hand) {
   if (!hand) return [];
@@ -135,8 +182,17 @@ export async function createGltfCharacter(canvas, url, opts = {}) {
   sun.position.set(1, 2, 3);
   scene.add(sun);
 
-  const gltf = await new GLTFLoader().loadAsync(url);
-  const model = gltf.scene;
+  const loader = new GLTFLoader();
+  loader.register((p) => new VRMLoaderPlugin(p));
+  const gltf = await loader.loadAsync(url);
+  const vrm = gltf.userData.vrm || null;
+  const model = vrm ? vrm.scene : gltf.scene;
+  if (vrm) {
+    VRMUtils.rotateVRM0(vrm); // VRM 0.x の後ろ向きのモデルをこちらに向ける
+    // ボーンはこのファイルで直接動かすので、three-vrm には上書きさせない
+    vrm.humanoid.autoUpdateHumanBones = false;
+    model.traverse((o) => { o.frustumCulled = false; });
+  }
 
   // Sketchfab の unlit 書き出しは色テクスチャを emissiveTexture に入れてくることがあるが、
   // three.js の unlit（MeshBasicMaterial）は emissive を描かないので通常のテクスチャに付け替える
@@ -168,14 +224,15 @@ export async function createGltfCharacter(canvas, url, opts = {}) {
   const holder = new THREE.Group();
   holder.add(model);
   scene.add(holder);
-  // VRM 0.x のモデルは後ろ（-Z）を向いているので、こちらを向かせる
-  model.rotation.y = opts.rotationY ?? (parser.json.extensions?.VRM ? Math.PI : 0);
+  // VRM 0.x のモデルは後ろ（-Z）を向いているので、こちらを向かせる（VRM として読めたときは rotateVRM0 済み）
+  if (opts.rotationY !== undefined) model.rotation.y = opts.rotationY;
+  else if (!vrm && parser.json.extensions?.VRM) model.rotation.y = Math.PI;
   model.updateMatrixWorld(true);
 
   // ---------- ボーン ----------
 
-  const rig = opts.rig === 'auto' ? autoDetectRig(model) : {};
-  if (opts.rig !== 'auto') {
+  const rig = vrm ? vrmRig(vrm) : opts.rig === 'auto' ? autoDetectRig(model) : {};
+  if (!vrm && opts.rig !== 'auto') {
     for (const [key, name] of Object.entries(opts.rig || {})) {
       const node = findNode(model, name);
       if (node) rig[key] = node;
@@ -224,9 +281,11 @@ export async function createGltfCharacter(canvas, url, opts = {}) {
     return [0, 1, 2, 3, 4].map((n) => [`${n}`, `${n}1`, `${n}2`]
       .map((s) => findNode(model, `${prefix}${s}`)).filter(Boolean));
   }
-  const fingers = opts.fingers === 'auto'
-    ? { left: autoDetectFingers(rig.leftHand), right: autoDetectFingers(rig.rightHand) }
-    : { left: findFingers(opts.fingers?.left), right: findFingers(opts.fingers?.right) };
+  const fingers = vrm
+    ? { left: vrmFingers(vrm, 'left'), right: vrmFingers(vrm, 'right') }
+    : opts.fingers === 'auto'
+      ? { left: autoDetectFingers(rig.leftHand), right: autoDetectFingers(rig.rightHand) }
+      : { left: findFingers(opts.fingers?.left), right: findFingers(opts.fingers?.right) };
   console.log(`[3d] fingers: left=${fingers.left.length ? 'ok' : 'なし'} right=${fingers.right.length ? 'ok' : 'なし'}`);
 
   // 読み込んだままの姿勢（A ポーズなど）。以後の動きはここからの差分で付ける
@@ -382,6 +441,51 @@ export async function createGltfCharacter(canvas, url, opts = {}) {
     }
   }
   const headAnchor = rig.head || pivot;
+
+  // ---------- VRM の顔（表情・まばたき・視線） ----------
+
+  const em = vrm?.expressionManager;
+  if (em) console.log(`[3d] VRM ${vrm.meta?.metaVersion ?? ''} expressions: ${Object.keys(em.expressionMap).join(',')} lookAt=${!!vrm.lookAt}`);
+  // モデルによって "Surprised" のように大文字で始まる表情名もあるので、大文字小文字を区別せずに探す
+  const exprKeys = em ? Object.keys(em.expressionMap) : [];
+  const exprName = (n) => exprKeys.find((k) => k === n) || exprKeys.find((k) => k.toLowerCase() === n.toLowerCase());
+  const setExpr = (n, v) => { const k = exprName(n); if (k) em.setValue(k, v); };
+  const faceNow = Object.fromEntries(VRM_FACE_NAMES.map((n) => [n, 0]));
+  // 調整用：config の model3d.demoFace に感情タグ（smile など）を入れると、その表情で始まる
+  let faceTarget = Object.fromEntries(VRM_FACES[opts.demoFace] || []);
+  let nextBlink = 2;
+  let blinkStart = -1;
+  const lookTarget = new THREE.Object3D();
+  if (vrm?.lookAt) {
+    scene.add(lookTarget);
+    lookTarget.position.copy(rig.head ? rig.head.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3(0, H * 0.9, 0));
+    lookTarget.position.z += H; // 最初は正面を見る
+    vrm.lookAt.target = lookTarget;
+  }
+
+  function updateFace(t, dt) {
+    if (!em) return;
+    // 表情はゆっくり切り替える
+    for (const n of VRM_FACE_NAMES) {
+      faceNow[n] += ((faceTarget[n] || 0) - faceNow[n]) * Math.min(1, dt * 6);
+      setExpr(n, faceNow[n]);
+    }
+    // まばたき（笑顔など目を閉じる表情のときはしない）
+    if (t > nextBlink && blinkStart < 0) blinkStart = t;
+    let blink = 0;
+    if (blinkStart >= 0) {
+      const p = (t - blinkStart) / 0.16;
+      if (p >= 1) {
+        blinkStart = -1;
+        nextBlink = t + 2 + Math.random() * 4;
+      } else {
+        blink = Math.sin(p * Math.PI);
+      }
+    }
+    setExpr('blink', blink * (1 - Math.min(1, faceNow.happy * 1.5)));
+    // 口：話している間は「あ」の口を開け閉めする
+    setExpr('aa', Math.max(mouth * 0.9, (faceTarget.aa || 0)));
+  }
 
   // ---------- 動き ----------
 
@@ -573,6 +677,8 @@ export async function createGltfCharacter(canvas, url, opts = {}) {
     }
   }
 
+  let lastT = 0;
+
   function render() {
     const t = clock.getElapsedTime();
 
@@ -623,6 +729,14 @@ export async function createGltfCharacter(canvas, url, opts = {}) {
       pivot.rotation.set(look.pitch + poseNow.pitch + nod, look.yaw, poseNow.roll);
     }
 
+    // VRM：表情・視線・髪や服の揺れ（揺れは体を動かした後に計算する）
+    if (vrm) {
+      const dt = Math.min(0.1, t - lastT);
+      updateFace(t, dt);
+      vrm.update(dt);
+    }
+    lastT = t;
+
     renderer.render(scene, camera);
     requestAnimationFrame(render);
   }
@@ -656,8 +770,18 @@ export async function createGltfCharacter(canvas, url, opts = {}) {
       const hy = (1 - tmp.y) / 2 * window.innerHeight;
       look.tYaw = clamp((x - hx) / window.innerWidth * 1.4, -0.5, 0.5);
       look.tPitch = clamp((y - hy) / window.innerHeight * 0.9, -0.25, 0.3);
+      // VRM の目は、マウスの先（顔より少し手前の面）を見る
+      if (vrm?.lookAt) {
+        raycaster.setFromCamera(toNdc(x, y), camera);
+        const faceZ = headAnchor.getWorldPosition(tmp).z + H * 0.3;
+        const { origin, direction } = raycaster.ray;
+        const k = (faceZ - origin.z) / direction.z;
+        lookTarget.position.copy(origin).addScaledVector(direction, k);
+      }
     },
-    setExpression: (name) => {
+    // name は体の動き（config の expressions の値）、tag は感情タグ（VRM の表情に使う）
+    setExpression: (name, tag) => {
+      if (em && tag) faceTarget = Object.fromEntries(VRM_FACES[tag] || []);
       if (!name) return;
       if (ONE_SHOT[name]) {
         action = { name, start: clock.getElapsedTime() };

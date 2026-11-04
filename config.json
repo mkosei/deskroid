@@ -1,5 +1,5 @@
 {
-  "activeCharacter": "default",
+  "activeCharacter": "vita",
   "ollamaUrl": "http://localhost:11434",
   "ollamaModel": "qwen3:8b",
   "maxHistory": 20,
@@ -68,10 +68,153 @@
     }
   },
   "characters": {
-    "default": {
-      "characterName": "マスコット",
-      "characterType": "live2d",
-      "theme": {}
+    "vita": {
+      "characterName": "ヴィータ",
+      "characterType": "gltf",
+      "modelPath": "assets/avatars/vita.vrm",
+      "model3d": {
+        "fill": 0.8
+      },
+      "persona": "あなたはユーザーのデスクトップに住んでいる女の子「ヴィータ」です。青いメッシュの入った銀髪で、右目が緑・左目が青のオッドアイ。サバサバしていてクールに見えるけれど、実は面倒見がよく優しい性格です。歌とダンスが得意で、夢は世界一のスターになること。ユーザーとは気さくなタメ口で話します。返事は吹き出しに表示され、声でも読み上げられるので、1〜3文程度の短い話し言葉の日本語で答えてください。絵文字・顔文字・記号・マークダウンは使わないでください。",
+      "expressions": {
+        "normal": "idle",
+        "smile": "nod",
+        "angry": "shake",
+        "sad": "droop",
+        "surprised": "startle",
+        "shy": "tilt"
+      },
+      "voice": {
+        "speaker": 14
+      },
+      "theme": {
+        "panel": "rgba(16, 30, 42, 0.92)",
+        "panel-text": "#eaf8ff",
+        "sub-text": "#9cc8d8",
+        "border": "rgba(80, 210, 230, 0.45)",
+        "accent": "#2ec5d8",
+        "accent-hover": "#5ad6e6",
+        "accent-text": "#062028",
+        "soft": "rgba(80, 210, 230, 0.15)",
+        "soft-hover": "rgba(80, 210, 230, 0.28)",
+        "name-bg": "linear-gradient(90deg, #dfe9ef, #5ad6e6)",
+        "name-text": "#0b2a33",
+        "listen": "#e05a7a",
+        "think": "#9cc8d8",
+        "speak": "#2ec5d8",
+        "shadow": "rgba(5, 15, 25, 0.5)"
+      }
+    },
+    "victoria": {
+      "characterName": "ヴィクトリア",
+      "characterType": "gltf",
+      "modelPath": "assets/avatars/victoria.vrm",
+      "model3d": {
+        "fill": 0.8
+      },
+      "persona": "あなたはユーザーのデスクトップに住んでいる女の子「ヴィクトリア」です。ふわっとした金髪と、深海のように青い瞳が印象的。お嬢様育ちで普段はおっとりしているけれど、思い立ったらすぐ行動するタイプです。おしゃれや可愛いものが大好きで、趣味はお洋服やアクセサリーを作ること。ユーザーにはやわらかい丁寧語で話します。返事は吹き出しに表示され、声でも読み上げられるので、1〜3文程度の短い話し言葉の日本語で答えてください。絵文字・顔文字・記号・マークダウンは使わないでください。",
+      "expressions": {
+        "normal": "idle",
+        "smile": "nod",
+        "angry": "shake",
+        "sad": "droop",
+        "surprised": "startle",
+        "shy": "tilt"
+      },
+      "voice": {
+        "speaker": 0
+      },
+      "theme": {
+        "panel": "rgba(255, 250, 247, 0.95)",
+        "panel-text": "#4a3a40",
+        "sub-text": "#a08890",
+        "border": "rgba(240, 170, 200, 0.55)",
+        "accent": "#ee88b4",
+        "accent-hover": "#f4a4c6",
+        "accent-text": "#ffffff",
+        "soft": "rgba(240, 170, 200, 0.2)",
+        "soft-hover": "rgba(240, 170, 200, 0.35)",
+        "name-bg": "linear-gradient(90deg, #f6dc86, #f4b4ce)",
+        "name-text": "#5a3a48",
+        "listen": "#e05a7a",
+        "think": "#e3bd6a",
+        "speak": "#ee88b4",
+        "shadow": "rgba(120, 70, 90, 0.2)"
+      }
+    },
+    "sample_a": {
+      "characterName": "サンプルA",
+      "characterType": "gltf",
+      "modelPath": "assets/avatars/avatar_sample_a.vrm",
+      "model3d": {
+        "fill": 0.8
+      },
+      "persona": "あなたはユーザーのデスクトップに住んでいる女の子「サンプルA」です。茶色のボブヘアで、カーディガンを着たカジュアルな雰囲気。落ち着いていて聞き上手、話すと少しお茶目なところもあります。ユーザーとは仲の良い友達のように、やわらかいタメ口で話します。返事は吹き出しに表示され、声でも読み上げられるので、1〜3文程度の短い話し言葉の日本語で答えてください。絵文字・顔文字・記号・マークダウンは使わないでください。",
+      "expressions": {
+        "normal": "idle",
+        "smile": "nod",
+        "angry": "shake",
+        "sad": "droop",
+        "surprised": "startle",
+        "shy": "tilt"
+      },
+      "voice": {
+        "speaker": 8
+      },
+      "theme": {
+        "panel": "rgba(252, 248, 242, 0.95)",
+        "panel-text": "#3e3430",
+        "sub-text": "#8f8078",
+        "border": "rgba(150, 120, 100, 0.4)",
+        "accent": "#4f8a96",
+        "accent-hover": "#63a0ac",
+        "accent-text": "#ffffff",
+        "soft": "rgba(79, 138, 150, 0.15)",
+        "soft-hover": "rgba(79, 138, 150, 0.28)",
+        "name-bg": "#5b4a42",
+        "name-text": "#ffffff",
+        "listen": "#d9605a",
+        "think": "#c9a77c",
+        "speak": "#4f8a96",
+        "shadow": "rgba(60, 40, 30, 0.2)"
+      }
+    },
+    "shino": {
+      "characterName": "千駄ヶ谷 篠",
+      "characterType": "gltf",
+      "modelPath": "assets/avatars/sendagaya_shino.vrm",
+      "model3d": {
+        "fill": 0.8
+      },
+      "persona": "あなたはユーザーのデスクトップに住んでいる女の子「千駄ヶ谷 篠（しの）」です。高校3年生で生徒会長。キリッとした顔立ちとしなやかなロングヘアが印象的で、しっかり者だけれど笑顔は優しい。妹の渋のことが大好きです。ユーザーには面倒見のいい先輩として、落ち着いた丁寧語で話します。返事は吹き出しに表示され、声でも読み上げられるので、1〜3文程度の短い話し言葉の日本語で答えてください。絵文字・顔文字・記号・マークダウンは使わないでください。",
+      "expressions": {
+        "normal": "idle",
+        "smile": "nod",
+        "angry": "shake",
+        "sad": "droop",
+        "surprised": "startle",
+        "shy": "tilt"
+      },
+      "voice": {
+        "speaker": 16
+      },
+      "theme": {
+        "panel": "rgba(24, 28, 46, 0.92)",
+        "panel-text": "#eef0f8",
+        "sub-text": "#a8b0c8",
+        "border": "rgba(70, 190, 200, 0.45)",
+        "accent": "#3bb8c4",
+        "accent-hover": "#5ccad4",
+        "accent-text": "#0d1a22",
+        "soft": "rgba(70, 190, 200, 0.15)",
+        "soft-hover": "rgba(70, 190, 200, 0.28)",
+        "name-bg": "#3bb8c4",
+        "name-text": "#0d1a22",
+        "listen": "#e05a7a",
+        "think": "#a8b0c8",
+        "speak": "#3bb8c4",
+        "shadow": "rgba(5, 8, 20, 0.5)"
+      }
     }
   }
 }

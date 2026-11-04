@@ -4,7 +4,7 @@
 会話・音声認識・読み上げはすべてローカルで動くので、クラウドの API キーや利用料は要りません。
 
 - 会話: [Ollama](https://ollama.com/)（既定は `qwen3:8b`）
-- 表示: Electron + Live2D（Cubism 3/4）／ 3D（glTF・GLB・VRM、three.js）
+- 表示: Electron + Live2D（Cubism 3/4）／ 3D（glTF・GLB・VRM、three.js + [three-vrm](https://github.com/pixiv/three-vrm)）
 - 読み上げ: [VOICEVOX](https://voicevox.hiroshiba.jp/)
 - 音声認識: Whisper（[transformers.js](https://github.com/huggingface/transformers.js)、`whisper-large-v3-turbo`）
 
@@ -16,6 +16,21 @@
 - 「明日の天気は？」で天気予報を答える
 - 好きなモデルの読み込み（Live2D・3D）とキャラの切り替え
 - 3D モデルはボーンを自動で見つけて、視線・呼吸・手を振る・立ち姿・足の組み替えなどを付ける
+- VRM モデルは、まばたき・表情（笑顔・怒り・悲しみ・驚き）・口パク・視線・髪や服の揺れも動く
+
+## 同梱キャラクター
+
+最初から 4 人のキャラが入っていて、右クリック →「キャラ切り替え」で選べます。
+
+| キャラ | 見た目 | 話し方 | 声（VOICEVOX） |
+|---|---|---|---|
+| ヴィータ（最初はこの子） | 青いメッシュの入った銀髪、オッドアイ | クールだけど面倒見がいい、気さくなタメ口 | 冥鳴ひまり |
+| ヴィクトリア | ふわっとした金髪、ピンクのドレス | おっとりしたお嬢様、やわらかい丁寧語 | 四国めたん（あまあま） |
+| サンプルA | 茶色のボブ、カーディガン | 落ち着いた聞き上手、やわらかいタメ口 | 春日部つむぎ |
+| 千駄ヶ谷 篠 | 黒髪ロング、制服 | しっかり者の生徒会長、落ち着いた丁寧語 | 九州そら |
+
+モデルはどれも [VRoid プロジェクト](https://vroid.com/) のサンプルモデルで、VRoid Hub の利用条件（再配布・改変・商用利用 OK、クレジット不要）に従って同梱しています。
+アプリ本体の MIT ライセンスとは別の条件です。詳しくは [assets/avatars/LICENSE.md](assets/avatars/LICENSE.md) を見てください。
 
 ## 必要なもの
 
@@ -143,7 +158,8 @@ npm run dist
 - **3D**：首・頭・目・胸・腕・手・指・脚のボーンを名前から探します（VRM・Mixamo・3ds Max Biped・Unity・Blender などの名前に対応）。
   ボーンが見つかれば、視線・呼吸・手を振る・うなずく・立ち姿・足を組むなどが動きます。
   ボーンの無いモデルは、全体を揺らしたり跳ねさせたりする簡単な動きになります
-- **VRM 0.x**：後ろ向きのモデルはこちらを向くように回します
+- **VRM**：規格で決まっているボーン・表情を使うので、名前を推測しなくても確実に動きます。
+  まばたき・表情・口パク・視線・髪や服の揺れも付きます。VRM 0.x の後ろ向きのモデルはこちらを向くように回します
 
 ### 読み込んだキャラを調整する
 
@@ -198,4 +214,5 @@ npm run dist
 
 ## ライセンス
 
-[MIT](LICENSE)
+- アプリ本体のソースコード：[MIT](LICENSE)
+- 同梱キャラクターのモデル（`assets/avatars/`）：VRoid Hub の利用条件（[assets/avatars/LICENSE.md](assets/avatars/LICENSE.md)）

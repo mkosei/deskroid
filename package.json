@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
+    "@pixiv/three-vrm": "^3.5.5",
     "pixi-live2d-display": "0.4.0",
     "pixi.js": "6.5.10",
     "three": "^0.169.0"
@@ -55,7 +56,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "files": [
@@ -75,7 +78,10 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["arm64", "x64"]
+          "arch": [
+            "arm64",
+            "x64"
+          ]
         }
       ],
       "category": "public.app-category.productivity",
