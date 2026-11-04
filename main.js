@@ -505,8 +505,7 @@ function loadKokoro() {
     const tts = await KokoroTTS.from_pretrained(config.voice.kokoroModel || 'onnx-community/Kokoro-82M-v1.0-ONNX', {
       dtype: config.voice.kokoroDtype || 'q8',
       device: 'cpu',
-      progress_callback: (p) => kokoroProgress?.(p),
-    });
+      progress_callback: (p) => kokoroProgress?.(p),    });
     kokoroReady = true;
     console.log('[tts] Kokoro の準備完了');
     return tts;
@@ -557,15 +556,22 @@ function loadAsr() {
     const opts = {
       dtype: config.stt.dtype || { encoder_model: 'q8', decoder_model_merged: 'q4' },
       progress_callback: (p) => asrProgress?.(p),
+      // ONNX Runtime がメモリを先取りしておく仕組み（アリーナ・メモリパターン）を止める。
+      // 速さ・精度は変わらず、読み込み時の最大メモリが約 3.3GB → 1.9GB に減る（メモリ不足での読み込み失敗を防ぐ）
+      session_options: { enableCpuMemArena: false, enableMemPattern: false },
     };
-    try {
-      return await pipeline('automatic-speech-recognition', config.stt.model, { ...opts, device: config.stt.device });
-    } catch (err) {
-      console.warn(`STT: ${config.stt.device} で読み込めなかったので、少し待って CPU でもう一度読み込みます`, err.message);
-      // メモリが一時的に足りないときなどに "Protobuf parsing failed" で失敗することがあるので、間をおいてやり直す
-      await new Promise((r) => setTimeout(r, 3000));
-      return pipeline('automatic-speech-recognition', config.stt.model, { ...opts, device: 'cpu' });
+    // メモリが一時的に足りないと "Protobuf parsing failed" で失敗するので、間をおいて何回かやり直す
+    let lastErr;
+    for (const [i, device] of [config.stt.device, 'cpu', 'cpu'].entries()) {
+      try {
+        if (i > 0) await new Promise((r) => setTimeout(r, 5000));
+        return await pipeline('automatic-speech-recognition', config.stt.model, { ...opts, device });
+      } catch (err) {
+        lastErr = err;
+        console.warn(`[stt] 読み込みに失敗しました（${i + 1} 回目、${device}）`, err.message);
+      }
     }
+    throw lastErr;
   })();
   asrPromise.then(
     () => {

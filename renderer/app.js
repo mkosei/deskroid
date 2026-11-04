@@ -465,7 +465,8 @@ window.mate.on('stt-status', ({ ready, error }) => {
   sttReady = ready;
   if (ready && mic) setStatus('listening');
   if (error) {
-    showBubble(ui().sttLoadError(error));
+    // モデルの読み込み失敗（メモリ不足など）は、生のエラーではなく「どうすればいいか」を伝える
+    showBubble(/Load model|Protobuf/i.test(error) ? ui().sttLoadFailed : ui().sttLoadError(error));
     setVoiceMode(false);
   }
 });
