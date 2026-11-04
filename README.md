@@ -1,3 +1,5 @@
+<p align="center"><img src="build/icon.png" width="128" alt="Deskroid"></p>
+
 # Deskroid
 
 English | [日本語](README.ja.md)

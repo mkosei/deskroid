@@ -41,7 +41,9 @@
       "!*.log",
       "!CLAUDE.md",
       "!README.md",
-      "!.github/**"
+      "!.github/**",
+      "!build/**",
+      "!docs/**"
     ],
     "asarUnpack": [
       "node_modules/onnxruntime-node/**",

@@ -16,6 +16,9 @@ const IS_MAC = process.platform === 'darwin';
 const APP_NAME = 'Deskroid';
 const OLD_NAMES = ['desktop-mate', 'DesktopAI'];
 app.setName(APP_NAME);
+// 窓・タスクバーのアイコン（インストール版の exe のアイコンは build/icon.ico から付く）
+const APP_ICON = path.join(__dirname, 'assets', 'icon.png');
+if (process.platform === 'win32') app.setAppUserModelId('com.mkosei.deskroid');
 app.setPath('userData', path.join(app.getPath('appData'), APP_NAME));
 // 音声認識・声のモデル（数 GB）。node_modules 配下だと Windows のパス長制限を超えるので短い場所に置く
 const CACHE_ROOT = process.env.LOCALAPPDATA || app.getPath('userData');
@@ -139,6 +142,7 @@ function loadConfig() {
 function createWindow() {
   const { workArea } = screen.getPrimaryDisplay();
   win = new BrowserWindow({
+    icon: APP_ICON,
     width: WIN_W,
     height: WIN_H,
     x: workArea.x + workArea.width - WIN_W - 20,
@@ -555,6 +559,7 @@ function openThemeWindow() {
     return;
   }
   themeWin = new BrowserWindow({
+    icon: APP_ICON,
     width: 460,
     height: 800,
     title: strings(config.lang).colorTitle,
@@ -636,6 +641,7 @@ function openHotkeyWindow() {
     return;
   }
   hotkeyWin = new BrowserWindow({
+    icon: APP_ICON,
     width: 480,
     height: 460,
     title: strings(config.lang).hotkeyTitle,
@@ -711,6 +717,7 @@ function openSetupWindow() {
     return;
   }
   setupWin = new BrowserWindow({
+    icon: APP_ICON,
     width: 560,
     height: 800,
     title: strings(config.lang).setupTitle,
