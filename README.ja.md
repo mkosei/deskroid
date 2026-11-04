@@ -9,6 +9,12 @@ Deskroid（デスクロイド）は、デスクトップに常駐して話せる
 
 > 日本語と**英語**に対応しています。ふだんは OS の言語に合わせて切り替わり、右クリック →「言語 / Language」からも選べます。
 
+<p align="center">
+  <a href="https://github.com/mkosei/deskroid/releases/latest/download/Deskroid-Setup.exe"><img src="https://img.shields.io/badge/Download-Windows-5b6ee1?style=for-the-badge" alt="Windows"></a>
+  <a href="https://github.com/mkosei/deskroid/releases/latest/download/Deskroid-arm64.dmg"><img src="https://img.shields.io/badge/Download-Mac%20(Apple%20silicon)-4b2a7a?style=for-the-badge" alt="Mac (Apple silicon)"></a>
+  <a href="https://github.com/mkosei/deskroid/releases/latest/download/Deskroid-x64.dmg"><img src="https://img.shields.io/badge/Download-Mac%20(Intel)-4b2a7a?style=for-the-badge" alt="Mac (Intel)"></a>
+</p>
+
 ![同梱キャラクター（左から ヴィータ・ヴィクトリア・サンプルA・千駄ヶ谷 篠）](docs/screenshot.png)
 
 - 会話: [Ollama](https://ollama.com/)（既定は `qwen3:8b`）
@@ -51,13 +57,19 @@ Deskroid（デスクロイド）は、デスクトップに常駐して話せる
 
 ## インストール
 
-[Releases](https://github.com/mkosei/deskroid/releases) から、使っている OS のインストーラーをダウンロードします。
+<p align="center">
+  <a href="https://github.com/mkosei/deskroid/releases/latest/download/Deskroid-Setup.exe"><img src="https://img.shields.io/badge/Download-Windows-5b6ee1?style=for-the-badge" alt="Windows"></a>
+  <a href="https://github.com/mkosei/deskroid/releases/latest/download/Deskroid-arm64.dmg"><img src="https://img.shields.io/badge/Download-Mac%20(Apple%20silicon)-4b2a7a?style=for-the-badge" alt="Mac (Apple silicon)"></a>
+  <a href="https://github.com/mkosei/deskroid/releases/latest/download/Deskroid-x64.dmg"><img src="https://img.shields.io/badge/Download-Mac%20(Intel)-4b2a7a?style=for-the-badge" alt="Mac (Intel)"></a>
+</p>
+
+ボタンからは、いつでも最新版がダウンロードされます。前のバージョンや更新内容は [Releases](https://github.com/mkosei/deskroid/releases) にあります。
 
 | OS | ファイル |
 |---|---|
-| Windows | `Deskroid-Setup-<バージョン>.exe` |
-| Mac（Apple シリコン：M1 以降） | `Deskroid-<バージョン>-arm64.dmg` |
-| Mac（Intel） | `Deskroid-<バージョン>-x64.dmg` |
+| Windows | `Deskroid-Setup.exe` |
+| Mac（Apple シリコン：M1 以降） | `Deskroid-arm64.dmg` |
+| Mac（Intel） | `Deskroid-x64.dmg` |
 
 - **Windows**：ダブルクリックしてインストールします。「Windows によって PC が保護されました」と出たら、「詳細情報」→「実行」を押してください（署名をしていないアプリのため）。
   デスクトップとスタートメニューに「Deskroid」ができます

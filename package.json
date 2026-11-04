@@ -76,7 +76,7 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Deskroid",
-      "artifactName": "Deskroid-Setup-${version}.${ext}"
+      "artifactName": "Deskroid-Setup.${ext}"
     },
     "mac": {
       "target": [
@@ -98,7 +98,7 @@
       ]
     },
     "dmg": {
-      "artifactName": "Deskroid-${version}-${arch}.${ext}"
+      "artifactName": "Deskroid-${arch}.${ext}"
     }
   }
 }

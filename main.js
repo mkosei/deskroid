@@ -747,6 +747,14 @@ ipcMain.handle('setup:done', () => {
 
 // 二重起動しない（すでに動いていれば、そちらを前に出すだけ）
 if (!app.requestSingleInstanceLock()) app.quit();
+
+// 安全のため、どの窓もアプリ内のページ（file://）以外へは移動させず、新しい窓も開かせない
+app.on('web-contents-created', (_e, contents) => {
+  contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  contents.on('will-navigate', (event, url) => {
+    if (!url.startsWith('file://')) event.preventDefault();
+  });
+});
 app.on('second-instance', () => { win?.showInactive(); win?.moveTop(); });
 
 app.whenReady().then(async () => {

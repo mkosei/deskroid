@@ -9,6 +9,12 @@ Chat, speech recognition and text-to-speech all run locally, so there are no clo
 
 > The app works in **English** and **Japanese**. It follows your OS language by default, and you can switch from the right-click menu → "Language / 言語".
 
+<p align="center">
+  <a href="https://github.com/mkosei/deskroid/releases/latest/download/Deskroid-Setup.exe"><img src="https://img.shields.io/badge/Download-Windows-5b6ee1?style=for-the-badge" alt="Windows"></a>
+  <a href="https://github.com/mkosei/deskroid/releases/latest/download/Deskroid-arm64.dmg"><img src="https://img.shields.io/badge/Download-Mac%20(Apple%20silicon)-4b2a7a?style=for-the-badge" alt="Mac (Apple silicon)"></a>
+  <a href="https://github.com/mkosei/deskroid/releases/latest/download/Deskroid-x64.dmg"><img src="https://img.shields.io/badge/Download-Mac%20(Intel)-4b2a7a?style=for-the-badge" alt="Mac (Intel)"></a>
+</p>
+
 ![Bundled characters (from left: Vita, Victoria, Sample A, Shino Sendagaya)](docs/screenshot.png)
 
 - Chat: [Ollama](https://ollama.com/) (default model: `qwen3:8b`)
@@ -51,13 +57,19 @@ They are licensed separately from the app's MIT license. See [assets/avatars/LIC
 
 ## Installation
 
-Download the installer for your OS from [Releases](https://github.com/mkosei/deskroid/releases).
+<p align="center">
+  <a href="https://github.com/mkosei/deskroid/releases/latest/download/Deskroid-Setup.exe"><img src="https://img.shields.io/badge/Download-Windows-5b6ee1?style=for-the-badge" alt="Windows"></a>
+  <a href="https://github.com/mkosei/deskroid/releases/latest/download/Deskroid-arm64.dmg"><img src="https://img.shields.io/badge/Download-Mac%20(Apple%20silicon)-4b2a7a?style=for-the-badge" alt="Mac (Apple silicon)"></a>
+  <a href="https://github.com/mkosei/deskroid/releases/latest/download/Deskroid-x64.dmg"><img src="https://img.shields.io/badge/Download-Mac%20(Intel)-4b2a7a?style=for-the-badge" alt="Mac (Intel)"></a>
+</p>
+
+The buttons always download the latest version. Older versions and release notes are on the [Releases](https://github.com/mkosei/deskroid/releases) page.
 
 | OS | File |
 |---|---|
-| Windows | `Deskroid-Setup-<version>.exe` |
-| Mac (Apple silicon: M1 or later) | `Deskroid-<version>-arm64.dmg` |
-| Mac (Intel) | `Deskroid-<version>-x64.dmg` |
+| Windows | `Deskroid-Setup.exe` |
+| Mac (Apple silicon: M1 or later) | `Deskroid-arm64.dmg` |
+| Mac (Intel) | `Deskroid-x64.dmg` |
 
 - **Windows**: Double-click to install. If you see "Windows protected your PC", click "More info" → "Run anyway" (the app is not code-signed).
   A "Deskroid" shortcut is added to the desktop and the Start menu
