@@ -4,9 +4,10 @@ const fs = require('fs');
 const os = require('os');
 const { spawn } = require('child_process');
 const { pathToFileURL } = require('url');
-const { ROUTER_PROMPT, buildTools, runTool, resultNote } = require('./tools');
+const { routerPrompt, buildTools, runTool, resultNote } = require('./tools');
 const { MODEL_FILTERS, importModel, defaultPersona } = require('./model-import');
 const setup = require('./setup');
+const { strings } = require('./i18n');
 
 const IS_MAC = process.platform === 'darwin';
 
@@ -69,8 +70,20 @@ function loadConfig() {
   // 配色：配色設定画面で保存したもの（config.local.json の themes）があればそれを使う
   config.defaultTheme = chara.theme || {};
   config.theme = local.themes?.[id] || config.defaultTheme;
-  config.characterName ||= 'マスコット';
-  config.persona ||= defaultPersona(config.characterName, !!config.voice.enabled);
+
+  // 言語："auto" は OS の言語に合わせる（日本語以外は英語）
+  config.languageSetting = rawConfig.language || 'auto';
+  config.lang = config.languageSetting === 'auto'
+    ? (app.getLocale().toLowerCase().startsWith('ja') ? 'ja' : 'en')
+    : config.languageSetting;
+  const T = strings(config.lang);
+  if (config.lang === 'en') {
+    config.characterName = chara.characterName_en || chara.characterName || T.defaultCharacterName;
+    config.persona = chara.persona_en || defaultPersona(config.characterName, !!config.voice.enabled, 'en');
+  } else {
+    config.characterName ||= T.defaultCharacterName;
+    config.persona ||= defaultPersona(config.characterName, !!config.voice.enabled, 'ja');
+  }
   config.hotkeys = Object.fromEntries(
     Object.entries({ ...DEFAULT_HOTKEYS, ...config.hotkeys }).map(([k, v]) => [k, hotkeyFor(v)]),
   );
@@ -125,26 +138,34 @@ function switchCharacter(id) {
 
 // モデルを選んでもらい、models/ にコピーしてキャラとして追加する
 async function importModelFromDialog() {
+  const T = strings(config.lang);
   const { canceled, filePaths } = await dialog.showOpenDialog(win, {
-    title: 'キャラクターのモデルを選ぶ（Live2D は .model3.json）',
+    title: T.pickModelTitle,
     properties: ['openFile'],
-    filters: MODEL_FILTERS,
+    filters: MODEL_FILTERS.map((f, i) => (i === 0 ? { ...f, name: T.modelFilterAll } : f)),
   });
   if (canceled || !filePaths[0]) return;
   try {
     const taken = new Set(Object.keys(rawConfig.characters || {}));
-    const { id, entry } = importModel(filePaths[0], DATA_DIR, taken, !!rawConfig.voice?.enabled);
+    const { id, entry } = importModel(filePaths[0], DATA_DIR, taken, !!rawConfig.voice?.enabled, config.lang);
     const local = readLocalConfig();
     writeLocalConfig({ characters: { ...local.characters, [id]: entry }, activeCharacter: id });
     await dialog.showMessageBox(win, {
       type: 'info',
-      message: `「${entry.characterName}」を追加しました`,
-      detail: '名前や性格は、右クリック →「キャラ設定を開く」で config.local.json を編集して変えられます。',
+      message: T.importedTitle(entry.characterName),
+      detail: T.importedDetail,
     });
     win.reload();
   } catch (err) {
-    dialog.showErrorBox('モデルを読み込めませんでした', err.message);
+    dialog.showErrorBox(T.importFailed, err.message);
   }
+}
+
+// 言語を切り替えて、開いている窓を全部読み込み直す
+function switchLanguage(lang) {
+  writeLocalConfig({ language: lang });
+  loadConfig();
+  for (const w of BrowserWindow.getAllWindows()) w.reload();
 }
 
 // config.local.json を開く（無ければ空のものを作る）
@@ -164,53 +185,63 @@ ipcMain.on('move-window', (_e, { dx, dy }) => {
 });
 
 ipcMain.on('show-menu', (event, extra) => {
+  const T = strings(config.lang);
   const characters = Object.entries(rawConfig.characters || {});
   const poses = extra?.poses;
   const menu = Menu.buildFromTemplate([
     ...(characters.length > 1 ? [{
-      label: 'キャラ切り替え',
+      label: T.switchCharacter,
       submenu: characters.map(([id, c]) => ({
-        label: c.characterName || id,
+        label: (config.lang === 'en' && c.characterName_en) || c.characterName || id,
         type: 'radio',
         checked: id === config.characterId,
         click: () => { if (id !== config.characterId) switchCharacter(id); },
       })),
     }] : []),
     ...(poses?.poses?.length ? [{
-      label: '立ち姿',
+      label: T.standingPose,
       submenu: poses.poses.map(({ id, label }) => ({
-        label,
+        label: T.poseLabels?.[id] || label,
         type: 'radio',
         checked: id === poses.current,
         click: () => event.sender.send('set-pose', id),
       })),
     }] : []),
     ...(poses?.legs?.options?.length ? [{
-      label: '足',
+      label: T.legs,
       submenu: poses.legs.options.map(({ id, label }) => ({
-        label,
+        label: T.legLabels?.[id] || label,
         type: 'radio',
         checked: id === poses.legs.current,
         click: () => event.sender.send('set-legs', id),
       })),
     }] : []),
-    { label: `音声会話 ON/OFF（${config.hotkeys.voiceChat || 'ホットキーなし'}）`, click: () => event.sender.send('toggle-voice-chat') },
-    { label: '会話をリセット', click: () => event.sender.send('reset-chat') },
+    { label: T.voiceChat(config.hotkeys.voiceChat), click: () => event.sender.send('toggle-voice-chat') },
+    { label: T.resetChat, click: () => event.sender.send('reset-chat') },
     {
-      label: '常に最前面',
+      label: T.alwaysOnTop,
       type: 'checkbox',
       checked: win.isAlwaysOnTop(),
       click: (item) => win.setAlwaysOnTop(item.checked, 'floating'),
     },
     { type: 'separator' },
-    { label: 'モデルを読み込む…', click: () => importModelFromDialog() },
-    { label: 'キャラ設定を開く', click: () => openLocalConfig() },
-    { label: '配色設定…', click: () => openThemeWindow() },
-    { label: 'ホットキー設定…', click: () => openHotkeyWindow() },
-    { label: 'セットアップ（Ollama・声・マイクの確認）', click: () => openSetupWindow() },
-    { label: '設定を再読み込み', click: () => win.reload() },
+    { label: T.importModel, click: () => importModelFromDialog() },
+    { label: T.openCharacterSettings, click: () => openLocalConfig() },
+    { label: T.colorSettings, click: () => openThemeWindow() },
+    { label: T.hotkeySettings, click: () => openHotkeyWindow() },
+    { label: T.setup, click: () => openSetupWindow() },
+    {
+      label: T.language,
+      submenu: [['auto', T.langAuto], ['ja', '日本語'], ['en', 'English']].map(([id, label]) => ({
+        label,
+        type: 'radio',
+        checked: config.languageSetting === id,
+        click: () => { if (config.languageSetting !== id) switchLanguage(id); },
+      })),
+    },
+    { label: T.reload, click: () => win.reload() },
     { type: 'separator' },
-    { label: '終了', click: () => app.quit() },
+    { label: T.quit, click: () => app.quit() },
   ]);
   menu.popup({ window: win });
 });
@@ -255,15 +286,15 @@ async function streamOllama(messages, tools, onText) {
 
 // ①判定役としてツールを使うか決めて実行 → ②キャラとして結果を踏まえて返事、の2段階にする
 async function runTools(messages) {
-  const tools = buildTools(config);
+  const tools = buildTools(config, config.lang);
   if (!tools.length) return [];
   const recent = messages.filter((m) => m.role !== 'system').slice(-4);
-  const { toolCalls } = await streamOllama([{ role: 'system', content: ROUTER_PROMPT }, ...recent], tools, () => {});
+  const { toolCalls } = await streamOllama([{ role: 'system', content: routerPrompt(config.lang) }, ...recent], tools, () => {});
 
   const results = [];
   for (const call of toolCalls) {
     const { name, arguments: args } = call.function;
-    const result = await runTool(name, args, { config, shell });
+    const result = await runTool(name, args, { config, shell, lang: config.lang });
     console.log(`[tool] ${name}(${JSON.stringify(args)}) -> ${result}`);
     results.push(result);
   }
@@ -279,15 +310,13 @@ ipcMain.handle('chat', async (event, { id, messages }) => {
     const convo = [...messages];
     if (results.length) {
       const last = convo[convo.length - 1];
-      convo[convo.length - 1] = { ...last, content: `${last.content}\n\n${resultNote(results)}` };
+      convo[convo.length - 1] = { ...last, content: `${last.content}\n\n${resultNote(results, config.lang)}` };
     }
     await streamOllama(convo, [], (text) => send('chat-chunk', { text }));
     send('chat-done', {});
   } catch (err) {
-    const msg = err.cause?.code === 'ECONNREFUSED'
-      ? 'Ollamaに接続できないみたい…起動してるか確認してね。'
-      : `エラー: ${err.message}`;
-    send('chat-error', { message: msg });
+    const T = strings(config.lang);
+    send('chat-error', { message: err.cause?.code === 'ECONNREFUSED' ? T.ollamaUnreachable : T.error(err.message) });
   }
 });
 
@@ -323,9 +352,11 @@ async function voicevoxReady() {
   }
 }
 
-// エンジンが動いていなければ裏で起動する（VOICEVOX 本体を開かなくても喋れるように）
-async function ensureVoicevox() {
-  if (!config.voice?.enabled || (await voicevoxReady())) return;
+// エンジンが動いていなければ裏で起動する（VOICEVOX 本体を開かなくても喋れるように）。
+// 英語のときは VOICEVOX ではなく Kokoro で話すので起動しない
+async function ensureVoicevox({ force = false } = {}) {
+  if (!force && (config.lang === 'en' || !config.voice?.enabled)) return;
+  if (await voicevoxReady()) return;
   const exe = findVoicevoxEngine();
   if (!exe) return console.warn('VOICEVOX エンジンが見つかりません');
   const port = new URL(config.voice.voicevoxUrl).port || '50021';
@@ -339,7 +370,42 @@ async function ensureVoicevox() {
   }
 }
 
+// ---------- 英語の音声合成（Kokoro / kokoro-js） ----------
+
+let kokoroPromise = null;
+let kokoroReady = false;
+let kokoroProgress = null; // セットアップ画面に進み具合を知らせる
+
+function loadKokoro() {
+  if (kokoroPromise) return kokoroPromise;
+  kokoroPromise = (async () => {
+    const { env } = await import('@huggingface/transformers');
+    env.cacheDir = path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'desktop-mate', 'hf-cache');
+    const { KokoroTTS } = await import('kokoro-js');
+    const tts = await KokoroTTS.from_pretrained(config.voice.kokoroModel || 'onnx-community/Kokoro-82M-v1.0-ONNX', {
+      dtype: config.voice.kokoroDtype || 'q8',
+      device: 'cpu',
+      progress_callback: (p) => kokoroProgress?.(p),
+    });
+    kokoroReady = true;
+    console.log('[tts] Kokoro の準備完了');
+    return tts;
+  })();
+  kokoroPromise.catch(() => { kokoroPromise = null; });
+  return kokoroPromise;
+}
+
+async function speakEnglish(text) {
+  const tts = await loadKokoro();
+  const audio = await tts.generate(text, {
+    voice: config.voice.enVoice || 'af_heart',
+    speed: config.voice.enSpeed || 1,
+  });
+  return new Uint8Array(audio.toWav());
+}
+
 ipcMain.handle('tts', async (_e, text) => {
+  if (config.lang === 'en') return speakEnglish(text);
   const { voicevoxUrl, speaker, speedScale = 1, pitchScale = 0, intonationScale = 1 } = config.voice;
   const q = await fetch(
     `${voicevoxUrl}/audio_query?speaker=${speaker}&text=${encodeURIComponent(text)}`,
@@ -395,18 +461,24 @@ function loadAsr() {
 }
 
 // 無音や雑音のときに Whisper が出しがちな定型文
-const STT_NOISE = /^(ご視聴ありがとうございました|ご清聴ありがとうございました|お疲れ様でした|字幕|はい|。|\s)*[。.!！]?$/;
+const STT_NOISE = {
+  ja: /^(ご視聴ありがとうございました|ご清聴ありがとうございました|お疲れ様でした|字幕|はい|。|\s)*[。.!！]?$/,
+  en: /^(thank you( for watching)?|thanks for watching|you|bye|okay|\.|\s)*[.!]?$/i,
+};
 
 ipcMain.handle('stt', async (_e, samples) => {
   const asr = await loadAsr();
   const audio = samples instanceof Float32Array ? samples : new Float32Array(samples);
-  const { text } = await asr(audio, { language: 'japanese', task: 'transcribe' });
+  const language = config.lang === 'en' ? 'english' : 'japanese';
+  const { text } = await asr(audio, { language, task: 'transcribe' });
   const t = text.trim();
-  return STT_NOISE.test(t) ? '' : t;
+  return STT_NOISE[config.lang]?.test(t) ? '' : t;
 });
 
 ipcMain.handle('stt-warmup', () => {
   if (config.stt?.enabled) loadAsr().catch(() => {});
+  // 英語で声ありなら、最初の返事を待たせないよう Kokoro も先に読み込んでおく
+  if (config.lang === 'en' && config.voice?.enabled) loadKokoro().catch((err) => console.warn('[tts] Kokoro を読み込めませんでした', err.message));
 });
 
 // ---------- 配色 ----------
@@ -445,7 +517,7 @@ function openThemeWindow() {
   themeWin = new BrowserWindow({
     width: 460,
     height: 800,
-    title: '配色設定',
+    title: strings(config.lang).colorTitle,
     resizable: false,
     autoHideMenuBar: true,
     webPreferences: {
@@ -462,6 +534,7 @@ function openThemeWindow() {
 }
 
 ipcMain.handle('theme:get', () => ({
+  lang: config.lang,
   characterName: config.characterName,
   theme: appliedTheme,
   hasDefault: Object.keys(config.defaultTheme || {}).length > 0,
@@ -496,7 +569,7 @@ ipcMain.handle('theme:reset', async () => {
 // ---------- ホットキー ----------
 
 const HOTKEY_ACTIONS = { listenOnce: 'listen-once', voiceChat: 'toggle-voice-chat' };
-const HOTKEY_LABELS = { listenOnce: '1 回だけ声を聞く', voiceChat: '音声会話 ON/OFF' };
+const hotkeyLabels = (T) => ({ listenOnce: T.hotkeyListenOnce, voiceChat: T.hotkeyVoiceChat });
 
 // 登録し直す。登録できなかった（他のアプリが使っているなど）ものの名前を返す
 function registerHotkeys(hotkeys) {
@@ -525,7 +598,7 @@ function openHotkeyWindow() {
   hotkeyWin = new BrowserWindow({
     width: 480,
     height: 460,
-    title: 'ホットキー設定',
+    title: strings(config.lang).hotkeyTitle,
     resizable: false,
     autoHideMenuBar: true,
     webPreferences: {
@@ -542,9 +615,10 @@ function openHotkeyWindow() {
 }
 
 ipcMain.handle('hotkeys:get', () => ({
+  lang: config.lang,
   current: config.hotkeys,
   defaults: DEFAULT_HOTKEYS,
-  labels: HOTKEY_LABELS,
+  labels: hotkeyLabels(strings(config.lang)),
   isMac: IS_MAC,
 }));
 
@@ -573,17 +647,19 @@ let setupWin = null;
 function setupContext() {
   return {
     config,
+    lang: config.lang,
     isMac: IS_MAC,
     findVoicevoxEngine,
     voicevoxReady,
-    startVoicevox: async () => {
-      const wasEnabled = config.voice.enabled;
-      config.voice.enabled = true; // 声なしのキャラでも、確認のために起動はできるように
-      try { await ensureVoicevox(); } finally { config.voice.enabled = wasEnabled; }
-    },
+    // 声なしのキャラや英語モードでも、確認のために起動はできるように
+    startVoicevox: () => ensureVoicevox({ force: true }),
     asr: {
       isReady: () => asrReady,
       load: (onProgress) => { asrProgress = onProgress; return loadAsr(); },
+    },
+    kokoro: {
+      isReady: () => kokoroReady,
+      load: (onProgress) => { kokoroProgress = onProgress; return loadKokoro(); },
     },
   };
 }
@@ -597,7 +673,7 @@ function openSetupWindow() {
   setupWin = new BrowserWindow({
     width: 560,
     height: 800,
-    title: 'セットアップ',
+    title: strings(config.lang).setupTitle,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'setup-preload.js'),
@@ -643,9 +719,10 @@ app.whenReady().then(async () => {
   for (const name of registerHotkeys(config.hotkeys)) {
     console.warn(`ホットキーを登録できませんでした（他のアプリが使用中かも）: ${name}=${config.hotkeys[name]}`);
   }
-  // 開発用：`electron . --hotkeys` / `--theme` で起動時に設定画面を開く
+  // 開発用：`electron . --hotkeys` / `--theme` / `--setup` で起動時に設定画面を開く
   if (process.argv.includes('--hotkeys')) openHotkeyWindow();
   if (process.argv.includes('--theme')) setTimeout(openThemeWindow, 3000);
+  if (process.argv.includes('--setup')) openSetupWindow();
 });
 
 // Mac ではウィンドウを全部閉じてもアプリを終わらせないのが普通だが、

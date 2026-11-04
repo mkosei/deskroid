@@ -30,7 +30,12 @@ const GLTF_EXPRESSIONS = {
   shy: 'tilt',
 };
 
-function defaultPersona(name, withVoice) {
+function defaultPersona(name, withVoice, lang = 'ja') {
+  if (lang === 'en') {
+    return `You are "${name}", who lives on the user's desktop. You are cheerful and friendly, and talk with the user like a friend. `
+      + `Your replies are shown in a speech bubble${withVoice ? ' and also read aloud' : ''}, so `
+      + 'answer in English with short, conversational replies of one to three sentences. Do not use emoji, emoticons, symbols or Markdown.';
+  }
   return `あなたはユーザーのデスクトップに住んでいる「${name}」です。明るく親しみやすい性格で、ユーザーとは友達のように話します。`
     + `返事は吹き出しに表示${withVoice ? 'され、声でも読み上げられる' : 'される'}ので、`
     + '1〜3文程度の短い話し言葉の日本語で答えてください。絵文字・顔文字・記号・マークダウンは使わないでください。';
@@ -68,12 +73,14 @@ function detectLive2D(model3Path) {
  * @param {boolean} withVoice 声ありか（性格の文面に使う）
  * @returns {{ id: string, entry: object }}
  */
-function importModel(src, appDir, takenIds, withVoice) {
+function importModel(src, appDir, takenIds, withVoice, lang = 'ja') {
   const lower = src.toLowerCase();
   const isLive2D = lower.endsWith('.model3.json');
   const ext = path.extname(lower);
   if (!isLive2D && !['.glb', '.gltf', '.vrm'].includes(ext)) {
-    throw new Error('Live2D の .model3.json か、3D の .glb / .gltf / .vrm を選んでください。');
+    throw new Error(lang === 'en'
+      ? 'Please choose a Live2D .model3.json, or a 3D .glb / .gltf / .vrm file.'
+      : 'Live2D の .model3.json か、3D の .glb / .gltf / .vrm を選んでください。');
   }
 
   const base = path.basename(src).replace(/\.model3\.json$/i, '').replace(/\.(glb|gltf|vrm)$/i, '');
@@ -93,7 +100,8 @@ function importModel(src, appDir, takenIds, withVoice) {
     characterName: base,
     characterType: isLive2D ? 'live2d' : 'gltf',
     modelPath,
-    persona: defaultPersona(base, withVoice),
+    persona: defaultPersona(base, withVoice, 'ja'),
+    persona_en: defaultPersona(base, withVoice, 'en'),
   };
   if (isLive2D) {
     Object.assign(entry, { modelScale: 1.0 }, detectLive2D(path.join(destDir, path.basename(src))));

@@ -7,81 +7,199 @@ const recheckBtn = document.getElementById('recheck');
 let status = {};
 let busy = null; // 実行中の操作の名前
 
+// 画面の文言（status.lang で切り替え）
+const TEXT = {
+  ja: {
+    heading: 'セットアップ',
+    lead: 'キャラと話すために必要なものを確認します。足りないものはボタンから準備できます。',
+    recheck: '再チェック',
+    start: 'はじめる',
+    later: 'あとで設定する',
+    ready: '準備ができました。',
+    notReady: 'Ollama と会話モデルがそろうと話せるようになります。この画面は右クリックメニューからいつでも開けます。',
+    optional: '任意',
+    running: '実行中…',
+    officialSite: '公式サイト',
+    failed: (msg) => `うまくいきませんでした。\n${msg}`,
+    downloading: (file) => `${file} をダウンロード中`,
+    ollama: {
+      title: 'Ollama（会話する AI を動かすソフト）',
+      ok: (v) => `起動しています（バージョン ${v}）`,
+      stopped: 'インストールされていますが、起動していません。',
+      start: '起動する',
+      missing: 'インストールされていません。ダウンロードページから入れて、終わったら「再チェック」を押してください。',
+      download: 'ダウンロードページを開く',
+    },
+    model: {
+      title: '会話モデル',
+      ok: (m) => `${m} が入っています`,
+      missing: (m) => `${m} をダウンロードします（約 5GB、数分〜数十分）。`,
+      download: 'ダウンロードする',
+      unknown: (m) => `${m} が入っているか確認できませんでした。`,
+      waiting: (m) => `Ollama が起動したら、${m} があるか確認します。`,
+    },
+    voicevox: {
+      title: 'VOICEVOX（声で話させるとき）',
+      ok: '使えます。',
+      stopped: 'インストールされています。話すときはアプリが自動で起動します。',
+      start: '今すぐ起動して確かめる',
+      missing: '入っていません。声で話させたいときは、ダウンロードして一度起動してください。文字だけで話すなら不要です。',
+      download: 'ダウンロードページを開く',
+    },
+    kokoro: {
+      title: '英語の声（Kokoro）',
+      ok: '準備できています。',
+      notLoaded: '初めて話すときに自動でダウンロードされます（約 90MB）。今のうちに準備することもできます。',
+      prepare: '今すぐ準備する',
+    },
+    mic: {
+      title: 'マイク（声で話しかけるとき）',
+      ok: '使えます。',
+      askOnUse: '使うときに確認されます',
+      ask: 'マイクを使う許可がまだです。',
+      allow: '許可する',
+      denied: 'マイクの使用が許可されていません。設定の「プライバシー → マイク」でこのアプリを許可してください。',
+      settings: '設定を開く',
+    },
+    stt: {
+      title: '音声認識モデル（声で話しかけるとき）',
+      ok: '準備できています。',
+      notLoaded: '初めて声で話しかけたときに自動でダウンロードされます（約 1GB）。今のうちに準備することもできます。',
+      prepare: '今すぐ準備する',
+    },
+  },
+  en: {
+    heading: 'Setup',
+    lead: 'This checks what you need to talk with your character. Anything missing can be set up with the buttons.',
+    recheck: 'Check again',
+    start: 'Start',
+    later: 'Set up later',
+    ready: "You're all set.",
+    notReady: 'You can start talking once Ollama and the chat model are ready. You can open this screen anytime from the right-click menu.',
+    optional: 'Optional',
+    running: 'Working…',
+    officialSite: 'Official site',
+    failed: (msg) => `Something went wrong.\n${msg}`,
+    downloading: (file) => `Downloading ${file}`,
+    ollama: {
+      title: 'Ollama (runs the chat AI)',
+      ok: (v) => `Running (version ${v})`,
+      stopped: "Installed, but not running.",
+      start: 'Start it',
+      missing: 'Not installed. Install it from the download page, then press "Check again".',
+      download: 'Open the download page',
+    },
+    model: {
+      title: 'Chat model',
+      ok: (m) => `${m} is installed`,
+      missing: (m) => `Download ${m} (about 5 GB; takes a few minutes to tens of minutes).`,
+      download: 'Download',
+      unknown: (m) => `Couldn't check whether ${m} is installed.`,
+      waiting: (m) => `Once Ollama is running, this checks whether ${m} is installed.`,
+    },
+    voicevox: {
+      title: 'VOICEVOX (for a speaking voice)',
+      ok: 'Ready to use.',
+      stopped: 'Installed. The app starts it automatically when the character speaks.',
+      start: 'Start it now to check',
+      missing: "Not installed. To give your character a voice, download it and launch it once. Not needed for text-only chat.",
+      download: 'Open the download page',
+    },
+    kokoro: {
+      title: 'English voice (Kokoro)',
+      ok: 'Ready.',
+      notLoaded: 'Downloaded automatically the first time the character speaks (about 90 MB). You can also prepare it now.',
+      prepare: 'Prepare now',
+    },
+    mic: {
+      title: 'Microphone (for talking by voice)',
+      ok: 'Ready to use.',
+      askOnUse: "You'll be asked when it's first used",
+      ask: "Microphone access hasn't been granted yet.",
+      allow: 'Allow',
+      denied: 'Microphone access is not allowed. Allow this app under "Privacy → Microphone" in your system settings.',
+      settings: 'Open settings',
+    },
+    stt: {
+      title: 'Speech recognition model (for talking by voice)',
+      ok: 'Ready.',
+      notLoaded: 'Downloaded automatically the first time you talk by voice (about 1 GB). You can also prepare it now.',
+      prepare: 'Prepare now',
+    },
+  },
+};
+const t = () => TEXT[status.lang] || TEXT.ja;
+
 // 各項目の表示内容。state ごとに、色（ok / warn / ng / wait）・説明・ボタンを決める
 const ITEMS = [
   {
     key: 'ollama',
-    title: 'Ollama（会話する AI を動かすソフト）',
-    link: ['openOllamaSite', '公式サイト'],
-    view: (s) => ({
-      ok: { tone: 'ok', desc: `起動しています（${s.detail}）` },
-      stopped: { tone: 'warn', desc: 'インストールされていますが、起動していません。', actions: [['startOllama', '起動する', true]] },
-      missing: {
-        tone: 'ng',
-        desc: 'インストールされていません。ダウンロードページから入れて、終わったら「再チェック」を押してください。',
-        actions: [['openOllamaDownload', 'ダウンロードページを開く', true]],
-      },
+    link: 'openOllamaSite',
+    view: (s, x) => ({
+      ok: { tone: 'ok', desc: x.ok(s.detail) },
+      stopped: { tone: 'warn', desc: x.stopped, actions: [['startOllama', x.start, true]] },
+      missing: { tone: 'ng', desc: x.missing, actions: [['openOllamaDownload', x.download, true]] },
     })[s.state],
   },
   {
     key: 'model',
-    title: '会話モデル',
-    view: (s) => ({
-      ok: { tone: 'ok', desc: `${s.detail} が入っています` },
-      missing: { tone: 'ng', desc: `${s.detail} をダウンロードします（約 5GB、数分〜数十分）。`, actions: [['pullModel', 'ダウンロードする', true]] },
-      unknown: { tone: 'warn', desc: `${s.detail} が入っているか確認できませんでした。` },
-      waiting: { tone: 'wait', desc: `Ollama が起動したら、${s.detail} があるか確認します。` },
+    view: (s, x) => ({
+      ok: { tone: 'ok', desc: x.ok(s.detail) },
+      missing: { tone: 'ng', desc: x.missing(s.detail), actions: [['pullModel', x.download, true]] },
+      unknown: { tone: 'warn', desc: x.unknown(s.detail) },
+      waiting: { tone: 'wait', desc: x.waiting(s.detail) },
     })[s.state],
   },
   {
     key: 'voicevox',
-    title: 'VOICEVOX（声で話させるとき）',
     optional: true,
-    link: ['openVoicevoxSite', '公式サイト'],
-    view: (s) => ({
-      ok: { tone: 'ok', desc: '使えます。' },
-      stopped: { tone: 'warn', desc: 'インストールされています。話すときはアプリが自動で起動します。', actions: [['startVoicevox', '今すぐ起動して確かめる']] },
-      missing: {
-        tone: s.enabled ? 'warn' : 'wait',
-        desc: '入っていません。声で話させたいときは、ダウンロードして一度起動してください。文字だけで話すなら不要です。',
-        actions: [['openVoicevoxDownload', 'ダウンロードページを開く']],
-      },
+    link: 'openVoicevoxSite',
+    view: (s, x) => ({
+      ok: { tone: 'ok', desc: x.ok },
+      stopped: { tone: 'warn', desc: x.stopped, actions: [['startVoicevox', x.start]] },
+      missing: { tone: s.enabled ? 'warn' : 'wait', desc: x.missing, actions: [['openVoicevoxDownload', x.download]] },
+    })[s.state],
+  },
+  {
+    key: 'kokoro',
+    optional: true,
+    view: (s, x) => ({
+      ok: { tone: 'ok', desc: x.ok },
+      notLoaded: { tone: 'wait', desc: x.notLoaded, actions: [['prepareKokoro', x.prepare]] },
     })[s.state],
   },
   {
     key: 'mic',
-    title: 'マイク（声で話しかけるとき）',
-    view: (s) => ({
-      ok: { tone: 'ok', desc: s.detail || '使えます。' },
-      ask: { tone: 'warn', desc: 'マイクを使う許可がまだです。', actions: [['requestMic', '許可する', true]] },
-      denied: {
-        tone: 'ng',
-        desc: 'マイクの使用が許可されていません。設定の「プライバシー → マイク」でこのアプリを許可してください。',
-        actions: [['openMicSettings', '設定を開く']],
-      },
+    view: (s, x) => ({
+      ok: { tone: 'ok', desc: s.askOnUse ? x.askOnUse : x.ok },
+      ask: { tone: 'warn', desc: x.ask, actions: [['requestMic', x.allow, true]] },
+      denied: { tone: 'ng', desc: x.denied, actions: [['openMicSettings', x.settings]] },
     })[s.state],
   },
   {
     key: 'stt',
-    title: '音声認識モデル（声で話しかけるとき）',
     optional: true,
-    view: (s) => ({
-      ok: { tone: 'ok', desc: '準備できています。' },
-      notLoaded: {
-        tone: 'wait',
-        desc: '初めて声で話しかけたときに自動でダウンロードされます（約 1GB）。今のうちに準備することもできます。',
-        actions: [['prepareStt', '今すぐ準備する']],
-      },
+    view: (s, x) => ({
+      ok: { tone: 'ok', desc: x.ok },
+      notLoaded: { tone: 'wait', desc: x.notLoaded, actions: [['prepareStt', x.prepare]] },
     })[s.state],
   },
 ];
 
 function render() {
+  const T = t();
+  document.documentElement.lang = status.lang || 'ja';
+  document.title = T.heading;
+  document.getElementById('heading').textContent = T.heading;
+  document.getElementById('lead').textContent = T.lead;
+  recheckBtn.textContent = T.recheck;
+
   itemsEl.innerHTML = '';
   for (const item of ITEMS) {
     const s = status[item.key];
     if (!s) continue;
-    const v = item.view(s) || { tone: 'wait', desc: '' };
+    const x = T[item.key];
+    const v = item.view(s, x) || { tone: 'wait', desc: '' };
     const el = document.createElement('div');
     el.className = 'item';
     el.dataset.state = v.tone;
@@ -91,17 +209,17 @@ function render() {
       <div class="desc"></div>
       <div class="actions"></div>
       <div class="progress" id="progress-${item.key}"><div class="bar"><i></i></div><small></small></div>`;
-    el.querySelector('.title').textContent = item.title;
+    el.querySelector('.title').textContent = x.title;
     if (item.optional) {
       const tag = document.createElement('span');
       tag.className = 'tag';
-      tag.textContent = '任意';
+      tag.textContent = T.optional;
       el.querySelector('.title').append(tag);
     }
     el.querySelector('.desc').textContent = v.desc;
     for (const [action, label, primary] of v.actions || []) {
       const b = document.createElement('button');
-      b.textContent = busy === action ? '実行中…' : label;
+      b.textContent = busy === action ? T.running : label;
       if (primary) b.classList.add('primary');
       b.disabled = !!busy;
       b.addEventListener('click', () => run(action));
@@ -109,22 +227,19 @@ function render() {
     }
     // 入っていてもいなくても、公式サイトはいつでも開けるようにしておく
     if (item.link) {
-      const [action, label] = item.link;
       const a = document.createElement('button');
       a.className = 'link';
-      a.textContent = `${label} ↗`;
-      a.addEventListener('click', () => window.setup.action(action));
+      a.textContent = `${T.officialSite} ↗`;
+      a.addEventListener('click', () => window.setup.action(item.link));
       el.querySelector('.actions').append(a);
     }
     itemsEl.append(el);
   }
 
   const ready = status.ollama?.state === 'ok' && status.model?.state === 'ok';
-  startBtn.textContent = ready ? 'はじめる' : 'あとで設定する';
+  startBtn.textContent = ready ? T.start : T.later;
   startBtn.classList.toggle('primary', ready);
-  noteEl.textContent = ready
-    ? '準備ができました。'
-    : 'Ollama と会話モデルがそろうと話せるようになります。この画面は右クリックメニューからいつでも開けます。';
+  noteEl.textContent = ready ? T.ready : T.notReady;
   recheckBtn.disabled = !!busy;
 }
 
@@ -139,7 +254,7 @@ async function run(action) {
   try {
     await window.setup.action(action);
   } catch (err) {
-    alert(`うまくいきませんでした。\n${err.message}`);
+    alert(t().failed(err.message));
   } finally {
     busy = null;
     await check();
@@ -156,9 +271,9 @@ window.setup.onProgress((p) => {
   if (p.item === 'model') {
     if (p.total) pct = (p.completed || 0) / p.total * 100;
     text = p.total ? `${p.status}  ${(p.completed / 1e9 || 0).toFixed(2)} / ${(p.total / 1e9).toFixed(2)} GB` : p.status;
-  } else if (p.item === 'stt') {
+  } else if (p.item === 'stt' || p.item === 'kokoro') {
     pct = p.progress;
-    text = `${p.file} をダウンロード中`;
+    text = t().downloading(p.file);
   }
   if (pct !== null) box.querySelector('i').style.width = `${Math.min(100, pct).toFixed(1)}%`;
   box.querySelector('small').textContent = text;

@@ -143,12 +143,51 @@ function createPlaceholder() {
 
 // ---------- 状態表示 ----------
 
-const STATUS_LABELS = {
-  listening: '聞いています…',
-  thinking: '考え中…',
-  speaking: '話しています',
-  loading: '音声認識を準備中…',
+// 画面に出す文言（config.lang で切り替え）
+const UI_STRINGS = {
+  ja: {
+    status: { listening: '聞いています…', thinking: '考え中…', speaking: '話しています', loading: '音声認識を準備中…' },
+    micError: (msg) => `マイクが使えないみたいです。\n(${msg})`,
+    voiceTimeout: '声が聞こえなかったので、音声会話を終わりますね。',
+    sttError: (msg) => `うまく聞き取れませんでした。\n(${msg})`,
+    sttEmpty: 'ごめん、うまく聞き取れませんでした。もう一度お願いします。',
+    sttLoadError: (msg) => `音声認識を準備できませんでした。\n(${msg})`,
+    tagInstruction: (tags) => `返事の先頭には、そのときの気持ちに合うタグを必ず1つ付けてください。使えるタグ: ${tags}\n例: [smile] おはよう、今日も早いですね。`,
+    reset: '会話をリセットしました。',
+    modelLoadError: (msg) => `Live2Dモデルを読み込めなかったので仮の姿でいます。\n(${msg})`,
+    greeting: (name) => `${name}です。クリックで話しかけてください。マイクボタンで声でも話せますよ。`,
+    placeholder: '話しかける…',
+    mic: (key) => `音声会話（${key}）`,
+    send: '送信',
+  },
+  en: {
+    status: { listening: 'Listening…', thinking: 'Thinking…', speaking: 'Speaking', loading: 'Preparing speech recognition…' },
+    micError: (msg) => `I can't seem to use the microphone.\n(${msg})`,
+    voiceTimeout: "I didn't hear anything, so I'll end the voice conversation.",
+    sttError: (msg) => `I couldn't make that out.\n(${msg})`,
+    sttEmpty: "Sorry, I didn't catch that. Could you say it again?",
+    sttLoadError: (msg) => `I couldn't prepare speech recognition.\n(${msg})`,
+    tagInstruction: (tags) => `Always start your reply with exactly one tag that matches your mood. Available tags: ${tags}\nExample: [smile] Good morning, you're up early today.\nAlways reply in English.`,
+    reset: 'The conversation has been reset.',
+    modelLoadError: (msg) => `I couldn't load the model, so I'm using a stand-in for now.\n(${msg})`,
+    greeting: (name) => `Hi, I'm ${name}! Click me to talk, or use the mic button to talk by voice.`,
+    placeholder: 'Say something…',
+    mic: (key) => `Voice conversation (${key})`,
+    send: 'Send',
+  },
 };
+const ui = () => UI_STRINGS[config?.lang] || UI_STRINGS.ja;
+
+// "CommandOrControl+Alt+V" → "Ctrl+Alt+V"（Mac は "Command+Option+V"）のように、OS に合わせた呼び名にする
+function keyLabel(accel) {
+  if (!accel) return '';
+  const mac = /Mac/i.test(navigator.platform);
+  const names = {
+    CommandOrControl: mac ? 'Command' : 'Ctrl', CmdOrCtrl: mac ? 'Command' : 'Ctrl',
+    Control: 'Ctrl', Alt: mac ? 'Option' : 'Alt', Cmd: 'Command', Super: 'Win',
+  };
+  return accel.split('+').map((k) => names[k] || k).join('+');
+}
 
 function setStatus(state) {
   if (!state) {
@@ -156,7 +195,7 @@ function setStatus(state) {
     return;
   }
   statusEl.dataset.state = state;
-  statusText.textContent = STATUS_LABELS[state];
+  statusText.textContent = ui().status[state];
   statusEl.classList.remove('hidden');
 }
 
@@ -287,7 +326,7 @@ async function startListening() {
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
   } catch (err) {
-    showBubble(`マイクが使えないみたいです。\n(${err.message})`);
+    showBubble(ui().micError(err.message));
     oneShot = false;
     setVoiceMode(false);
     return;
@@ -348,7 +387,7 @@ async function startListening() {
       } else if (waitedMs > 20000) {
         // しばらく何も話さなければ音声会話を終える
         setVoiceMode(false);
-        showBubble('声が聞こえなかったので、音声会話を終わりますね。', '');
+        showBubble(ui().voiceTimeout, '');
         hideBubbleLater(5000);
       }
       return;
@@ -384,14 +423,14 @@ async function finishUtterance(chunks) {
     text = await window.mate.stt(samples);
   } catch (err) {
     console.error('[stt]', err);
-    showBubble(`うまく聞き取れませんでした。\n(${err.message})`);
+    showBubble(ui().sttError(err.message));
   }
   console.log(`[stt] ${(samples.length / 16000).toFixed(1)}s -> "${text}" (${Math.round(performance.now() - t0)}ms)`);
   const wasOneShot = oneShot;
   oneShot = false;
   if (!voiceMode && !wasOneShot) return; // 途中で取り消された
   if (!text) {
-    showBubble('ごめん、うまく聞き取れませんでした。もう一度お願いします。', '');
+    showBubble(ui().sttEmpty, '');
     hideBubbleLater(4000);
     if (voiceMode) startListening();
     else setStatus(null);
@@ -409,7 +448,7 @@ window.mate.on('stt-status', ({ ready, error }) => {
   sttReady = ready;
   if (ready && mic) setStatus('listening');
   if (error) {
-    showBubble(`音声認識を準備できませんでした。\n(${error})`);
+    showBubble(ui().sttLoadError(error));
     setVoiceMode(false);
   }
 });
@@ -524,7 +563,7 @@ let expressionTimer = null;
 function systemPrompt() {
   const tags = Object.keys(config.expressions || {});
   if (!tags.length || !character?.setExpression) return config.persona;
-  return `${config.persona}\n\n返事の先頭には、そのときの気持ちに合うタグを必ず1つ付けてください。使えるタグ: ${tags.map((t) => `[${t}]`).join(' ')}\n例: [smile] おはよう、今日も早いですね。`;
+  return `${config.persona}\n\n${ui().tagInstruction(tags.map((t) => `[${t}]`).join(' '))}`;
 }
 
 // 返事の先頭の [tag] を取り出す。タグが書きかけの間は本文を空にしておく。
@@ -542,7 +581,7 @@ function splitTag(text) {
 function speakCompletedSentences(body, flush = false) {
   let rest = body.slice(spokenLen);
   let m;
-  while ((m = rest.match(/^[\s\S]*?[。！？!?\n]+/))) {
+  while ((m = rest.match(/^[\s\S]*?(?:[。！？!?\n]+|\.+\s+)/))) {
     enqueueSpeech(m[0]);
     spokenLen += m[0].length;
     rest = rest.slice(m[0].length);
@@ -611,7 +650,7 @@ async function ask(text) {
 window.mate.on('reset-chat', () => {
   stopSpeaking();
   history = [];
-  showBubble('会話をリセットしました。', '');
+  showBubble(ui().reset, '');
   hideBubbleLater(4000);
 });
 
@@ -657,6 +696,10 @@ window.mate.on('theme-auto-request', async () => {
 (async () => {
   config = await window.mate.getConfig();
   bubbleName.textContent = config.characterName;
+  document.documentElement.lang = config.lang || 'ja';
+  input.placeholder = ui().placeholder;
+  micBtn.title = ui().mic(keyLabel(config.hotkeys?.voiceChat) || 'Ctrl+Alt+V');
+  sendBtn.title = ui().send;
   const hasTheme = Object.keys(config.theme || {}).length > 0;
   if (hasTheme) applyTheme(config.theme);
   if (config.stt?.enabled) window.mate.sttWarmup();
@@ -686,7 +729,7 @@ window.mate.on('theme-auto-request', async () => {
     console.error(err);
     canvas.classList.remove('hidden');
     character = createPlaceholder();
-    showBubble(`Live2Dモデルを読み込めなかったので仮の姿でいます。\n(${err.message})`, '');
+    showBubble(ui().modelLoadError(err.message), '');
     hideBubbleLater(10000);
     return;
   }
@@ -698,6 +741,6 @@ window.mate.on('theme-auto-request', async () => {
   } else {
     window.mate.themeApplied(config.theme);
   }
-  showBubble(`${config.characterName}です。クリックで話しかけてください。マイクボタンで声でも話せますよ。`, '');
+  showBubble(ui().greeting(config.characterName), '');
   hideBubbleLater(8000);
 })();

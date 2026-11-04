@@ -7,6 +7,41 @@ let info = null;    // { current, defaults, labels, isMac }
 let draft = {};     // 編集中の値（名前 → Accelerator。空文字は「なし」）
 let capturing = null; // キー入力を待っている項目の名前
 
+// 画面の文言（info.lang で切り替え）
+const TEXT = {
+  ja: {
+    heading: 'ホットキー設定',
+    lead: '「変更」を押してから、使いたいキーの組み合わせを押してください。Esc でやめられます。',
+    reset: '初期設定に戻す',
+    close: '閉じる',
+    save: '保存',
+    needModifier: 'Ctrl・Alt・Shift などと組み合わせてください（F1〜F12 は単独でも使えます）。',
+    pressKeys: 'キーを押してください…（Esc でやめる）',
+    none: 'なし（使わない）',
+    stop: 'やめる',
+    change: '変更',
+    clear: 'なしにする',
+    inUse: (label) => `そのキーは「${label}」で使っています。`,
+    taken: (labels) => `${labels.map((l) => `「${l}」`).join('・')}のキーは、ほかのアプリが使っているため登録できませんでした。別のキーにしてください。`,
+  },
+  en: {
+    heading: 'Hotkey settings',
+    lead: 'Press "Change", then press the key combination you want to use. Press Esc to cancel.',
+    reset: 'Restore defaults',
+    close: 'Close',
+    save: 'Save',
+    needModifier: 'Combine it with Ctrl, Alt, Shift or similar (F1–F12 can be used on their own).',
+    pressKeys: 'Press the keys… (Esc to cancel)',
+    none: 'None (disabled)',
+    stop: 'Cancel',
+    change: 'Change',
+    clear: 'Disable',
+    inUse: (label) => `That key is already used for "${label}".`,
+    taken: (labels) => `The keys for ${labels.map((l) => `"${l}"`).join(', ')} are used by another app and couldn't be registered. Please choose different keys.`,
+  },
+};
+const t = () => TEXT[info?.lang] || TEXT.ja;
+
 // e.code → Accelerator のキー名
 const CODE_KEYS = {
   Space: 'Space', Enter: 'Enter', Tab: 'Tab', Backspace: 'Backspace', Delete: 'Delete', Insert: 'Insert',
@@ -34,7 +69,7 @@ function toAccelerator(e) {
   if (e.shiftKey) mods.push('Shift');
   if (e.metaKey) mods.push(info.isMac ? 'Command' : 'Super');
   // 修飾キーなしで使えるのはファンクションキーだけ（普通の文字を奪わないように）
-  if (!mods.length && !/^F\d+$/.test(key)) return { error: 'Ctrl・Alt・Shift などと組み合わせてください（F1〜F12 は単独でも使えます）。' };
+  if (!mods.length && !/^F\d+$/.test(key)) return { error: t().needModifier };
   return { accel: [...mods, key].join('+') };
 }
 
@@ -65,7 +100,7 @@ function render() {
 
     const keys = row.querySelector('.keys');
     if (capturing === name) {
-      keys.innerHTML = '<span class="hint">キーを押してください…（Esc でやめる）</span>';
+      keys.innerHTML = `<span class="hint">${t().pressKeys}</span>`;
     } else if (value) {
       keyLabels(value).forEach((k, i) => {
         if (i) keys.insertAdjacentHTML('beforeend', '<span class="plus">+</span>');
@@ -74,15 +109,15 @@ function render() {
         keys.append(kbd);
       });
     } else {
-      keys.innerHTML = '<span class="none">なし（使わない）</span>';
+      keys.innerHTML = `<span class="none">${t().none}</span>`;
     }
 
     const actions = row.querySelector('.actions');
     const change = document.createElement('button');
-    change.textContent = capturing === name ? 'やめる' : '変更';
+    change.textContent = capturing === name ? t().stop : t().change;
     change.addEventListener('click', () => (capturing === name ? stopCapture() : startCapture(name)));
     const clear = document.createElement('button');
-    clear.textContent = 'なしにする';
+    clear.textContent = t().clear;
     clear.disabled = !value || !!capturing;
     clear.addEventListener('click', () => { draft[name] = ''; messageEl.textContent = ''; render(); });
     actions.append(change, clear);
@@ -120,7 +155,7 @@ window.addEventListener('keydown', (e) => {
   }
   const other = Object.entries(draft).find(([n, v]) => n !== capturing && v === result.accel);
   if (other) {
-    messageEl.textContent = `そのキーは「${info.labels[other[0]]}」で使っています。`;
+    messageEl.textContent = t().inUse(info.labels[other[0]]);
     return;
   }
   draft[capturing] = result.accel;
@@ -133,8 +168,7 @@ saveBtn.addEventListener('click', async () => {
     messageEl.style.color = '';
     window.close();
   } else {
-    const names = res.failed.map((n) => `「${info.labels[n]}」`).join('・');
-    messageEl.textContent = `${names}のキーは、ほかのアプリが使っているため登録できませんでした。別のキーにしてください。`;
+    messageEl.textContent = t().taken(res.failed.map((n) => info.labels[n]));
   }
 });
 
@@ -149,5 +183,13 @@ document.getElementById('cancel').addEventListener('click', () => window.close()
 (async () => {
   info = await window.hotkeys.get();
   draft = { ...info.current };
+  const T = t();
+  document.documentElement.lang = info.lang || 'ja';
+  document.title = T.heading;
+  document.getElementById('heading').textContent = T.heading;
+  document.getElementById('lead').textContent = T.lead;
+  document.getElementById('reset').textContent = T.reset;
+  document.getElementById('cancel').textContent = T.close;
+  saveBtn.textContent = T.save;
   render();
 })();

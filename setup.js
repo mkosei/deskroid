@@ -40,7 +40,7 @@ function hasModel(models, name) {
 
 async function checkAll(ctx) {
   const { config, isMac } = ctx;
-  const result = {};
+  const result = { lang: ctx.lang }; // 画面の言語（文言は画面側で作る）
 
   // Ollama と会話モデル
   let version = null;
@@ -48,7 +48,7 @@ async function checkAll(ctx) {
     version = (await getJson(`${config.ollamaUrl}/api/version`)).version;
   } catch {}
   if (version) {
-    result.ollama = { state: 'ok', detail: `バージョン ${version}` };
+    result.ollama = { state: 'ok', detail: version };
     try {
       const { models = [] } = await getJson(`${config.ollamaUrl}/api/tags`);
       result.model = hasModel(models, config.ollamaModel)
@@ -62,19 +62,23 @@ async function checkAll(ctx) {
     result.model = { state: 'waiting', detail: config.ollamaModel };
   }
 
-  // VOICEVOX（任意）
-  if (await ctx.voicevoxReady()) result.voicevox = { state: 'ok' };
-  else if (ctx.findVoicevoxEngine()) result.voicevox = { state: 'stopped' };
-  else result.voicevox = { state: 'missing' };
-  result.voicevox.optional = true;
-  result.voicevox.enabled = !!config.voice?.enabled;
+  // 声（任意）。日本語は VOICEVOX、英語は Kokoro（アプリの中で動くので、初回にダウンロードするだけ）
+  if (ctx.lang === 'en') {
+    result.kokoro = { state: ctx.kokoro.isReady() ? 'ok' : 'notLoaded', optional: true, enabled: !!config.voice?.enabled };
+  } else {
+    if (await ctx.voicevoxReady()) result.voicevox = { state: 'ok' };
+    else if (ctx.findVoicevoxEngine()) result.voicevox = { state: 'stopped' };
+    else result.voicevox = { state: 'missing' };
+    result.voicevox.optional = true;
+    result.voicevox.enabled = !!config.voice?.enabled;
+  }
 
   // マイク（Mac は OS の許可が要る。Windows は使うときに確認される）
   if (isMac) {
     const s = systemPreferences.getMediaAccessStatus('microphone');
     result.mic = { state: s === 'granted' ? 'ok' : s === 'not-determined' ? 'ask' : 'denied' };
   } else {
-    result.mic = { state: 'ok', detail: '使うときに確認されます' };
+    result.mic = { state: 'ok', askOnUse: true };
   }
 
   // 音声認識モデル（任意。初めて声で話しかけたときにも自動で準備される）
@@ -107,9 +111,9 @@ async function pullModel(config, onProgress) {
   }
 }
 
-async function startOllama(isMac) {
+async function startOllama(isMac, en) {
   const found = findOllama(isMac);
-  if (!found) throw new Error('Ollama が見つかりません。先にインストールしてください。');
+  if (!found) throw new Error(en ? "Couldn't find Ollama. Please install it first." : 'Ollama が見つかりません。先にインストールしてください。');
   if (isMac && found.endsWith('.app')) {
     spawn('open', ['-a', found], { detached: true, stdio: 'ignore' }).unref();
   } else {
@@ -122,18 +126,19 @@ async function startOllama(isMac) {
       return;
     } catch {}
   }
-  throw new Error('Ollama を起動できませんでした。手動で起動してみてください。');
+  throw new Error(en ? "Couldn't start Ollama. Please try starting it yourself." : 'Ollama を起動できませんでした。手動で起動してみてください。');
 }
 
 async function runAction(name, ctx, onProgress) {
   const { config, isMac } = ctx;
+  const en = ctx.lang === 'en';
   switch (name) {
     case 'openOllamaSite':
       return shell.openExternal(OLLAMA_SITE);
     case 'openOllamaDownload':
       return shell.openExternal(OLLAMA_DOWNLOAD);
     case 'startOllama':
-      return startOllama(isMac);
+      return startOllama(isMac, en);
     case 'pullModel':
       return pullModel(config, onProgress);
     case 'openVoicevoxDownload':
@@ -153,8 +158,13 @@ async function runAction(name, ctx, onProgress) {
         if (p.status === 'progress') onProgress({ item: 'stt', file: p.file, progress: p.progress });
       });
       return true;
+    case 'prepareKokoro':
+      await ctx.kokoro.load((p) => {
+        if (p.status === 'progress') onProgress({ item: 'kokoro', file: p.file, progress: p.progress });
+      });
+      return true;
     default:
-      throw new Error(`不明な操作: ${name}`);
+      throw new Error(en ? `Unknown action: ${name}` : `不明な操作: ${name}`);
   }
 }
 

@@ -130,54 +130,54 @@
   </style>
 </head>
 <body>
-  <h1>配色設定</h1>
+  <h1 data-t="heading">配色設定</h1>
   <p class="lead" id="lead">色を変えると、キャラの吹き出しや入力欄にすぐ反映されます。</p>
 
   <div class="preview" id="preview">
     <div class="p-bubble">
       <div class="p-name" id="p-name">キャラ</div>
-      <div class="p-you">あなた：こんにちは</div>
-      やっほー、今日もいい天気だね。
+      <div class="p-you" data-t="previewYou">あなた：こんにちは</div>
+      <span data-t="previewReply">やっほー、今日もいい天気だね。</span>
     </div>
-    <div class="p-bar"><div class="p-mic"></div><span>話しかける…</span><div class="p-send"></div></div>
+    <div class="p-bar"><div class="p-mic"></div><span data-t="placeholder">話しかける…</span><div class="p-send"></div></div>
   </div>
 
   <div id="fields">
     <label class="field">
-      <div>背景<small>吹き出しと入力欄の地の色</small></div>
+      <div><span data-t="panel">背景</span><small data-t="panelHint">吹き出しと入力欄の地の色</small></div>
       <div class="ctrl">
         <input type="range" id="panelAlpha" min="0.5" max="1" step="0.01"><span class="pct" id="alphaPct"></span>
         <input type="color" id="panel">
       </div>
     </label>
     <label class="field">
-      <div>文字<small>吹き出しの文字</small></div>
+      <div><span data-t="text">文字</span><small data-t="textHint">吹き出しの文字</small></div>
       <div class="ctrl"><input type="color" id="text"></div>
     </label>
     <label class="field">
-      <div>強調色<small>送信ボタン・枠線・「話しています」の点</small></div>
+      <div><span data-t="accent">強調色</span><small data-t="accentHint">送信ボタン・枠線・「話しています」の点</small></div>
       <div class="ctrl"><input type="color" id="accent"></div>
     </label>
     <label class="field">
-      <div>名札<small>吹き出しの左上の名前</small></div>
+      <div><span data-t="nameBg">名札</span><small data-t="nameBgHint">吹き出しの左上の名前</small></div>
       <div class="ctrl"><input type="color" id="nameBg"></div>
     </label>
     <label class="field">
-      <div>名札の文字</div>
+      <div><span data-t="nameText">名札の文字</span></div>
       <div class="ctrl"><input type="color" id="nameText"></div>
     </label>
   </div>
 
   <div class="tools">
-    <button id="auto">キャラの見た目から自動で作る</button>
-    <button id="reset">元の配色に戻す</button>
+    <button id="auto" data-t="auto">キャラの見た目から自動で作る</button>
+    <button id="reset" data-t="reset">元の配色に戻す</button>
   </div>
   <div id="status"></div>
 
   <footer>
     <span class="spacer"></span>
-    <button id="close">閉じる</button>
-    <button id="save" class="primary">保存</button>
+    <button id="close" data-t="close">閉じる</button>
+    <button id="save" class="primary" data-t="save">保存</button>
   </footer>
 
   <script src="theme.js"></script>
