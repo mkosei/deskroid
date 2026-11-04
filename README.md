@@ -122,6 +122,8 @@ npm run dist
 | `Ctrl+Space`（Mac は `Option+Space`） | 1 回だけ声を聞いて返事をする（聞いている途中にもう一度押すと取り消し） |
 | `Ctrl+Alt+V`（Mac は `Command+Option+V`）/ マイクボタン | 音声会話モードの ON/OFF（話し終わるたびに自動でまた聞く） |
 
+ホットキーは、右クリック →「ホットキー設定…」で好きなキーに変えられます（下を参照）。
+
 右クリックメニュー：
 
 | 項目 | 内容 |
@@ -133,6 +135,7 @@ npm run dist
 | 常に最前面 | ほかのウィンドウより前に出しておくか |
 | モデルを読み込む… | 好きなモデルを追加する（下で説明） |
 | キャラ設定を開く | `config.local.json` を開く |
+| ホットキー設定… | ホットキーを変える。「変更」を押してから使いたいキーを押すと登録され、保存するとすぐ使えます。「なしにする」で使わないこともできます |
 | 設定を再読み込み | 設定ファイルの変更を反映する |
 
 話しかけ方の例：
@@ -201,7 +204,7 @@ npm run dist
 | 項目 | 内容 |
 |---|---|
 | `ollamaModel` | 会話に使う Ollama のモデル（例：`qwen3:14b`） |
-| `hotkeys` | `listenOnce`（1 回だけ聞く）と `voiceChat`（音声会話 ON/OFF）のキー。`{ "win": "Control+Space", "mac": "Alt+Space" }` のように OS ごとにも書けます |
+| `hotkeys` | `listenOnce`（1 回だけ聞く）と `voiceChat`（音声会話 ON/OFF）のキー。`{ "win": "Control+Space", "mac": "Alt+Space" }` のように OS ごとにも書けます。ふだんは「ホットキー設定…」から変えるのが簡単です（`config.local.json` に保存されます） |
 | `apps` | 開けるサイト・アプリ。`open` に URL かパス、`search` に `{query}` 入りの検索 URL |
 | `weather.places` | 天気を調べる地域（地名と緯度・経度） |
 | `voice` | VOICEVOX の URL・話者 ID・話速など |

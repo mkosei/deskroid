@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>ホットキー設定</title>
+  <style>
+    :root {
+      --bg: #f6f6f9;
+      --card: #ffffff;
+      --text: #22212b;
+      --sub: #6b6a78;
+      --line: #e3e2ea;
+      --accent: #5b6ee1;
+      --accent-text: #ffffff;
+      --ng: #d94b5b;
+      --key-bg: #efeff5;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #17161d;
+        --card: #211f29;
+        --text: #eceaf3;
+        --sub: #a19fae;
+        --line: #33313d;
+        --accent: #8496f0;
+        --accent-text: #15141b;
+        --key-bg: #2c2a36;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 22px 22px 84px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Yu Gothic UI", "Hiragino Sans", "Meiryo", sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    h1 { margin: 0 0 4px; font-size: 18px; }
+    .lead { margin: 0 0 16px; color: var(--sub); font-size: 13px; }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px 12px;
+      align-items: center;
+      margin-bottom: 10px;
+      padding: 12px 14px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .row.capturing { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+    .name { font-weight: 700; }
+    .keys { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 26px; }
+    kbd {
+      padding: 1px 8px;
+      background: var(--key-bg);
+      border: 1px solid var(--line);
+      border-bottom-width: 2px;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 13px;
+    }
+    .plus { color: var(--sub); font-size: 12px; }
+    .none, .hint { color: var(--sub); font-size: 13px; }
+    .actions { grid-row: 1 / span 2; grid-column: 2; display: flex; gap: 6px; }
+    button {
+      padding: 6px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--card);
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+    button:disabled { opacity: 0.5; cursor: default; }
+    #message { min-height: 20px; margin: 6px 2px 0; color: var(--ng); font-size: 13px; }
+    footer {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      gap: 8px;
+      padding: 12px 22px;
+      background: var(--bg);
+      border-top: 1px solid var(--line);
+    }
+    footer .spacer { flex: 1; }
+  </style>
+</head>
+<body>
+  <h1>ホットキー設定</h1>
+  <p class="lead">「変更」を押してから、使いたいキーの組み合わせを押してください。Esc でやめられます。</p>
+
+  <div id="rows"></div>
+  <p id="message"></p>
+
+  <footer>
+    <button id="reset">初期設定に戻す</button>
+    <span class="spacer"></span>
+    <button id="cancel">閉じる</button>
+    <button id="save" class="primary">保存</button>
+  </footer>
+
+  <script src="hotkeys.js"></script>
+</body>
+</html>

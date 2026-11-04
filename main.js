@@ -202,6 +202,7 @@ ipcMain.on('show-menu', (event, extra) => {
     { type: 'separator' },
     { label: 'モデルを読み込む…', click: () => importModelFromDialog() },
     { label: 'キャラ設定を開く', click: () => openLocalConfig() },
+    { label: 'ホットキー設定…', click: () => openHotkeyWindow() },
     { label: 'セットアップ（Ollama・声・マイクの確認）', click: () => openSetupWindow() },
     { label: '設定を再読み込み', click: () => win.reload() },
     { type: 'separator' },
@@ -404,6 +405,79 @@ ipcMain.handle('stt-warmup', () => {
   if (config.stt?.enabled) loadAsr().catch(() => {});
 });
 
+// ---------- ホットキー ----------
+
+const HOTKEY_ACTIONS = { listenOnce: 'listen-once', voiceChat: 'toggle-voice-chat' };
+const HOTKEY_LABELS = { listenOnce: '1 回だけ声を聞く', voiceChat: '音声会話 ON/OFF' };
+
+// 登録し直す。登録できなかった（他のアプリが使っているなど）ものの名前を返す
+function registerHotkeys(hotkeys) {
+  globalShortcut.unregisterAll();
+  const failed = [];
+  for (const [name, accel] of Object.entries(hotkeys)) {
+    if (!accel || !HOTKEY_ACTIONS[name]) continue;
+    let ok = false;
+    try {
+      ok = globalShortcut.register(accel, () => win?.webContents.send(HOTKEY_ACTIONS[name]));
+    } catch {
+      ok = false; // キーの書き方が正しくないとき
+    }
+    if (!ok) failed.push(name);
+  }
+  return failed;
+}
+
+let hotkeyWin = null;
+
+function openHotkeyWindow() {
+  if (hotkeyWin) {
+    hotkeyWin.focus();
+    return;
+  }
+  hotkeyWin = new BrowserWindow({
+    width: 480,
+    height: 460,
+    title: 'ホットキー設定',
+    resizable: false,
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'hotkeys-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  hotkeyWin.loadFile(path.join(__dirname, 'renderer', 'hotkeys.html'));
+  hotkeyWin.on('closed', () => {
+    hotkeyWin = null;
+    registerHotkeys(config.hotkeys); // キー入力の待ち受け中に閉じても元に戻す
+  });
+}
+
+ipcMain.handle('hotkeys:get', () => ({
+  current: config.hotkeys,
+  defaults: DEFAULT_HOTKEYS,
+  labels: HOTKEY_LABELS,
+  isMac: IS_MAC,
+}));
+
+// キーを押してもらっている間は、今のホットキーが反応しないように外しておく
+ipcMain.handle('hotkeys:suspend', () => globalShortcut.unregisterAll());
+ipcMain.handle('hotkeys:resume', () => registerHotkeys(config.hotkeys));
+
+// 試しに登録してみて、全部登録できたら config.local.json に保存する。だめなら元に戻す
+ipcMain.handle('hotkeys:save', (_e, hotkeys) => {
+  const next = { ...config.hotkeys, ...hotkeys };
+  const failed = registerHotkeys(next);
+  if (failed.length) {
+    registerHotkeys(config.hotkeys);
+    return { ok: false, failed };
+  }
+  const local = readLocalConfig();
+  writeLocalConfig({ hotkeys: { ...local.hotkeys, ...hotkeys } });
+  config.hotkeys = next;
+  return { ok: true };
+});
+
 // ---------- 初回セットアップ ----------
 
 let setupWin = null;
@@ -478,13 +552,11 @@ app.whenReady().then(async () => {
   }
   ensureVoicevox();
 
-  // ホットキー（config.json の hotkeys で変更できる）
-  const actions = { listenOnce: 'listen-once', voiceChat: 'toggle-voice-chat' };
-  for (const [name, accel] of Object.entries(config.hotkeys)) {
-    if (!accel || !actions[name]) continue;
-    const ok = globalShortcut.register(accel, () => win?.webContents.send(actions[name]));
-    if (!ok) console.warn(`ホットキーを登録できませんでした（他のアプリが使用中かも）: ${name}=${accel}`);
+  for (const name of registerHotkeys(config.hotkeys)) {
+    console.warn(`ホットキーを登録できませんでした（他のアプリが使用中かも）: ${name}=${config.hotkeys[name]}`);
   }
+  // 開発用：`electron . --hotkeys` で起動時にホットキー設定を開く
+  if (process.argv.includes('--hotkeys')) openHotkeyWindow();
 });
 
 // Mac ではウィンドウを全部閉じてもアプリを終わらせないのが普通だが、
