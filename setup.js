@@ -5,8 +5,9 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
+const OLLAMA_SITE = 'https://ollama.com/';
 const OLLAMA_DOWNLOAD = 'https://ollama.com/download';
-const VOICEVOX_DOWNLOAD = 'https://voicevox.hiroshiba.jp/';
+const VOICEVOX_SITE = 'https://voicevox.hiroshiba.jp/';
 
 async function getJson(url, timeoutMs = 3000) {
   const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
@@ -127,6 +128,8 @@ async function startOllama(isMac) {
 async function runAction(name, ctx, onProgress) {
   const { config, isMac } = ctx;
   switch (name) {
+    case 'openOllamaSite':
+      return shell.openExternal(OLLAMA_SITE);
     case 'openOllamaDownload':
       return shell.openExternal(OLLAMA_DOWNLOAD);
     case 'startOllama':
@@ -134,7 +137,8 @@ async function runAction(name, ctx, onProgress) {
     case 'pullModel':
       return pullModel(config, onProgress);
     case 'openVoicevoxDownload':
-      return shell.openExternal(VOICEVOX_DOWNLOAD);
+    case 'openVoicevoxSite':
+      return shell.openExternal(VOICEVOX_SITE);
     case 'startVoicevox':
       return ctx.startVoicevox();
     case 'requestMic':

@@ -12,6 +12,7 @@ const ITEMS = [
   {
     key: 'ollama',
     title: 'Ollama（会話する AI を動かすソフト）',
+    link: ['openOllamaSite', '公式サイト'],
     view: (s) => ({
       ok: { tone: 'ok', desc: `起動しています（${s.detail}）` },
       stopped: { tone: 'warn', desc: 'インストールされていますが、起動していません。', actions: [['startOllama', '起動する', true]] },
@@ -36,6 +37,7 @@ const ITEMS = [
     key: 'voicevox',
     title: 'VOICEVOX（声で話させるとき）',
     optional: true,
+    link: ['openVoicevoxSite', '公式サイト'],
     view: (s) => ({
       ok: { tone: 'ok', desc: '使えます。' },
       stopped: { tone: 'warn', desc: 'インストールされています。話すときはアプリが自動で起動します。', actions: [['startVoicevox', '今すぐ起動して確かめる']] },
@@ -104,6 +106,15 @@ function render() {
       b.disabled = !!busy;
       b.addEventListener('click', () => run(action));
       el.querySelector('.actions').append(b);
+    }
+    // 入っていてもいなくても、公式サイトはいつでも開けるようにしておく
+    if (item.link) {
+      const [action, label] = item.link;
+      const a = document.createElement('button');
+      a.className = 'link';
+      a.textContent = `${label} ↗`;
+      a.addEventListener('click', () => window.setup.action(action));
+      el.querySelector('.actions').append(a);
     }
     itemsEl.append(el);
   }

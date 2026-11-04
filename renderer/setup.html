@@ -85,6 +85,14 @@
     }
     button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
     button:disabled { opacity: 0.5; cursor: default; }
+    button.link {
+      padding: 6px 4px;
+      border: none;
+      background: none;
+      color: var(--accent);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
     .progress { grid-column: 2; display: none; margin-top: 6px; }
     .progress.on { display: block; }
     .bar { height: 6px; overflow: hidden; background: var(--line); border-radius: 3px; }
