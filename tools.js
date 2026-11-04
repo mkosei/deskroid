@@ -557,10 +557,18 @@ async function runTool(name, args, ctx) {
 // エージェントループ：判定役にツールを選ばせて実行し、結果を返してまた考えさせる。
 // 「全部終わった（ツールを呼ばない）」と言うか、maxSteps 回で止める
 // chat(messages, tools) は { toolCalls } を返す関数（main.js は Ollama のストリーム、テストは普通の fetch）
+// 結果を見てから次を決めるための「調べる」ツール。これ以外（開く・セットする・書き込む…）を実行したら、そこで止める
+// （小さいモデルは、終わったあとも余計なツール（検索など）を呼び続けることがあるため）
+const INFO_TOOLS = new Set(['get_weather', 'read_clipboard']);
+
 async function runAgent({ chat, history, tools, ctx: baseCtx, maxSteps = 5, log = () => {} }) {
   let ctx = baseCtx;
-  const messages = [{ role: 'system', content: routerPrompt(ctx.lang) }, ...history];
-  const request = [...history].reverse().find((m) => m.role === 'user')?.content || '';
+  // 判定役には、最後の発言と、その直前のキャラの返事（「これ」などが何を指すかの手がかり）だけを渡す。
+  // それより前の発言を渡すと、もう済んだ頼み（前のタイマーなど）をもう一度実行してしまう
+  const lastUser = history.map((m) => m.role).lastIndexOf('user');
+  const prev = history[lastUser - 1]?.role === 'assistant' ? [history[lastUser - 1]] : [];
+  const messages = [{ role: 'system', content: routerPrompt(ctx.lang) }, ...prev, ...history.slice(lastUser, lastUser + 1)];
+  const request = history[lastUser]?.content || '';
   const show = []; // 返事のあとに吹き出しへそのまま出す文章（翻訳など）
   ctx = { ...ctx, request, show };
   const results = [];
@@ -583,6 +591,8 @@ async function runAgent({ chat, history, tools, ctx: baseCtx, maxSteps = 5, log 
       results.push({ name, result });
       messages.push({ role: 'tool', content: result, tool_name: name });
     }
+    // 調べただけの回なら、結果を見て続ける。何かを実行した回なら、そこで終わり
+    if (!fresh.some((c) => INFO_TOOLS.has(c.function.name))) break;
   }
   // 作った文章（翻訳など）を吹き出しに出すときは、元のクリップボードの文章を返事役に渡さない（同じ内容を二度言わせない）
   const forReply = results.filter((r) => !(show.length && r.name === 'read_clipboard')).map((r) => r.result);
