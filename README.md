@@ -148,8 +148,8 @@ Pushing a tag such as `v0.2.0` makes GitHub Actions build installers for both Wi
 | Left-click the character | Show / hide the input box (the character reacts) |
 | Drag the character | Move it anywhere |
 | Right-click the character | Open the menu (see below) |
-| `Ctrl+Space` (Mac: `Option+Space`) | Listen once and reply (press again while listening to cancel) |
-| `Ctrl+Alt+V` (Mac: `Command+Option+V`) / mic button | Toggle voice conversation mode (keeps listening after each reply) |
+| `Ctrl+Space` (Mac: `Option+Space`) | Listen once and reply. It sends after 3 seconds of silence; press again (or the send button) to send right away. Pressing again before you start talking cancels |
+| `Ctrl+Alt+V` (Mac: `Command+Option+V`) / mic button | Toggle voice conversation mode (keeps listening after each reply). Each turn is sent after 3 seconds of silence, or right away with the send button |
 
 You can change the hotkeys from the right-click menu → "Hotkey settings…" (see below).
 
@@ -245,7 +245,7 @@ Main keys:
 | `apps` | Extra sites and apps the character can open (installed apps and common sites like Google, YouTube and Amazon work without this). `open` is a URL or a path to an app; `search` is a search URL containing `{query}`. Use a path for apps that are not in the Start menu / Applications folder |
 | `weather.places` | Locations for weather lookups (name, latitude and longitude; `name_en` sets the English name) |
 | `voice` | Voice settings: Kokoro voice (`enVoice`) and speed (`enSpeed`) for English; VOICEVOX URL, speaker ID and speaking speed for Japanese |
-| `stt` | Speech recognition model, device and precision |
+| `stt` | Speech recognition model, device and precision. `silenceMs` is how long to wait in silence before sending what you said (default 3000 = 3 seconds) |
 
 ## Notes
 

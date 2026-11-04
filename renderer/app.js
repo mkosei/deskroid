@@ -307,6 +307,7 @@ let mic = null;           // 録音中のリソース
 function listenOnce() {
   if (voiceMode) return; // 音声会話モード中はもともと聞いている
   if (oneShot) {
+    if (sendSpeechNow()) return; // 話している途中なら、待たずに送る
     oneShot = false;
     stopListening();
     if (!generating && !playing) setStatus(null);
@@ -364,7 +365,7 @@ async function startListening() {
   let peak = 0;
   let logMs = 0;
 
-  const self = { stream, ctx };
+  const self = { stream, ctx, chunks, started: false };
   mic = self;
 
   proc.onaudioprocess = (e) => {
@@ -393,6 +394,7 @@ async function startListening() {
       waitedMs += frameMs;
       if (voicedMs >= 190) {
         started = true;
+        self.started = true;
         console.log('[mic] 発話を検出');
         chunks.push(...preroll);
       } else if (oneShot && waitedMs > 8000) {
@@ -411,11 +413,31 @@ async function startListening() {
 
     chunks.push(data);
     silentMs = voiced ? 0 : silentMs + frameMs;
-    if (silentMs > 900 || chunks.length * frameMs > 25000) finishUtterance(chunks);
+    self.silentMs = silentMs;
+    self.frameMs = frameMs;
+    if (silentMs > SILENCE_MS() || chunks.length * frameMs > MAX_UTTERANCE_MS) finishUtterance(trimSilence(chunks, silentMs, frameMs));
   };
 
   source.connect(proc);
   proc.connect(ctx.destination);
+}
+
+// 話し終わったとみなすまでの、黙っている時間。考えながら話しても切れないよう長めにする
+// （待たずに送りたいときは、送信ボタンかホットキーをもう一度押す）
+const SILENCE_MS = () => config.stt?.silenceMs ?? 3000;
+const MAX_UTTERANCE_MS = 30000; // 1 回に話せる長さの上限
+
+// 話している途中なら、黙るのを待たずにすぐ送る。送ったら true
+function sendSpeechNow() {
+  if (!mic?.started) return false;
+  finishUtterance(trimSilence(mic.chunks, mic.silentMs || 0, mic.frameMs || 64));
+  return true;
+}
+
+// 最後の無音は 0.3 秒だけ残して切る（長い無音を Whisper に渡すと、言っていない言葉を聞き取ることがある）
+function trimSilence(chunks, silentMs, frameMs) {
+  const drop = Math.floor(Math.max(0, silentMs - 300) / frameMs);
+  return drop > 0 ? chunks.slice(0, chunks.length - drop) : chunks;
 }
 
 function stopListening() {
@@ -602,6 +624,7 @@ input.addEventListener('keydown', (e) => {
 inputBar.addEventListener('submit', async (e) => {
   e.preventDefault();
   const text = input.value.trim();
+  if (!text && sendSpeechNow()) return;
   if (!text || generating) return;
   input.value = '';
   await ask(text);
