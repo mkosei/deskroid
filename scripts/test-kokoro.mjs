@@ -6,8 +6,8 @@ import path from 'path';
 import fs from 'fs';
 
 // node_modules 配下だと Windows のパス長制限(260文字)を超えるので短い場所に置く（アプリ本体と同じ場所）
-env.cacheDir = path.join(process.env.LOCALAPPDATA || '.', 'desktop-mate', 'hf-cache');
-const outDir = path.join(process.env.LOCALAPPDATA || '.', 'desktop-mate');
+env.cacheDir = path.join(process.env.LOCALAPPDATA || '.', 'Deskroid', 'hf-cache');
+const outDir = path.join(process.env.LOCALAPPDATA || '.', 'Deskroid');
 const voices = process.argv.length > 2 ? process.argv.slice(2) : ['af_heart', 'bf_emma'];
 
 let t = Date.now();

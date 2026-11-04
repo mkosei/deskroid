@@ -1,10 +1,11 @@
 {
-  "name": "desktop-mate",
+  "name": "deskroid",
+  "productName": "Deskroid",
   "version": "0.1.0",
-  "description": "デスクトップ常駐型の会話AI（Live2D / 3D キャラ・Ollama・VOICEVOX・Whisper）",
+  "description": "デスクトップに常駐して話せるキャラクター（Live2D / 3D・Ollama・VOICEVOX / Kokoro・Whisper）",
   "author": "mkosei",
-  "homepage": "https://github.com/mkosei/desktop_ai",
-  "repository": "github:mkosei/desktop_ai",
+  "homepage": "https://github.com/mkosei/deskroid",
+  "repository": "github:mkosei/deskroid",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -26,8 +27,8 @@
   },
   "license": "MIT",
   "build": {
-    "appId": "com.mkosei.desktopai",
-    "productName": "DesktopAI",
+    "appId": "com.mkosei.deskroid",
+    "productName": "Deskroid",
     "directories": {
       "output": "dist"
     },
@@ -50,7 +51,7 @@
     "publish": {
       "provider": "github",
       "owner": "mkosei",
-      "repo": "desktop_ai",
+      "repo": "deskroid",
       "releaseType": "release"
     },
     "win": {
@@ -72,8 +73,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "デスクトップAI",
-      "artifactName": "DesktopAI-Setup-${version}.${ext}"
+      "shortcutName": "Deskroid",
+      "artifactName": "Deskroid-Setup-${version}.${ext}"
     },
     "mac": {
       "target": [
@@ -95,7 +96,7 @@
       ]
     },
     "dmg": {
-      "artifactName": "DesktopAI-${version}-${arch}.${ext}"
+      "artifactName": "Deskroid-${version}-${arch}.${ext}"
     }
   }
 }

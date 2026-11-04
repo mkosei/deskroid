@@ -1,8 +1,8 @@
-# desktop_ai
+# Deskroid
 
 [English](README.md) | 日本語
 
-デスクトップに常駐する会話AIです。好きなキャラクター（Live2D または 3D）が画面の隅にいて、文字でも声でも話しかけられます。
+Deskroid（デスクロイド）は、デスクトップに常駐して話せるキャラクターのアプリです。好きなキャラクター（Live2D または 3D）が画面の隅にいて、文字でも声でも話しかけられます。
 会話・音声認識・読み上げはすべてローカルで動くので、クラウドの API キーや利用料は要りません。
 
 > 日本語と**英語**に対応しています。ふだんは OS の言語に合わせて切り替わり、右クリック →「言語 / Language」からも選べます。
@@ -49,22 +49,22 @@
 
 ## インストール
 
-[Releases](https://github.com/mkosei/desktop_ai/releases) から、使っている OS のインストーラーをダウンロードします。
+[Releases](https://github.com/mkosei/deskroid/releases) から、使っている OS のインストーラーをダウンロードします。
 
 | OS | ファイル |
 |---|---|
-| Windows | `DesktopAI-Setup-<バージョン>.exe` |
-| Mac（Apple シリコン：M1 以降） | `DesktopAI-<バージョン>-arm64.dmg` |
-| Mac（Intel） | `DesktopAI-<バージョン>-x64.dmg` |
+| Windows | `Deskroid-Setup-<バージョン>.exe` |
+| Mac（Apple シリコン：M1 以降） | `Deskroid-<バージョン>-arm64.dmg` |
+| Mac（Intel） | `Deskroid-<バージョン>-x64.dmg` |
 
 - **Windows**：ダブルクリックしてインストールします。「Windows によって PC が保護されました」と出たら、「詳細情報」→「実行」を押してください（署名をしていないアプリのため）。
-  デスクトップとスタートメニューに「デスクトップAI」ができます
+  デスクトップとスタートメニューに「Deskroid」ができます
 - **Mac**：dmg を開いて、アプリを「アプリケーション」フォルダへドラッグします。
   署名をしていないアプリなので、初回は Finder でアプリを右クリック →「開く」を選んでください。
   それでも開けないときは、ターミナルで次を実行します
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/DesktopAI.app
+xattr -dr com.apple.quarantine /Applications/Deskroid.app
 ```
 
 ### 初回セットアップ
@@ -88,10 +88,10 @@ Ollama につながらないときも、起動時に自動でこの画面が出�
 [Node.js](https://nodejs.org/) LTS が必要です。
 
 ```bash
-git clone https://github.com/mkosei/desktop_ai.git
+git clone https://github.com/mkosei/deskroid.git
 ```
 ```bash
-cd desktop_ai
+cd deskroid
 ```
 ```bash
 npm install
@@ -205,8 +205,8 @@ npm run dist
 
 | 動かし方 | 場所 |
 |---|---|
-| インストーラーで入れた（Windows） | `%APPDATA%\desktop-mate` |
-| インストーラーで入れた（Mac） | `~/Library/Application Support/desktop-mate` |
+| インストーラーで入れた（Windows） | `%APPDATA%\Deskroid` |
+| インストーラーで入れた（Mac） | `~/Library/Application Support/Deskroid` |
 | ソースから動かしている | アプリのフォルダ |
 
 右クリック →「キャラ設定を開く」で、`config.local.json` をすぐ開けます。

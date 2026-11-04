@@ -11,6 +11,46 @@ const { strings } = require('./i18n');
 
 const IS_MAC = process.platform === 'darwin';
 
+// ---------- アプリの名前とデータの置き場所 ----------
+// 旧名（Desktop Mate / DesktopAI）のときのデータがあれば、初回起動時に新しい場所へ移す
+const APP_NAME = 'Deskroid';
+const OLD_NAMES = ['desktop-mate', 'DesktopAI'];
+app.setName(APP_NAME);
+app.setPath('userData', path.join(app.getPath('appData'), APP_NAME));
+// 音声認識・声のモデル（数 GB）。node_modules 配下だと Windows のパス長制限を超えるので短い場所に置く
+const CACHE_ROOT = process.env.LOCALAPPDATA || app.getPath('userData');
+const MODEL_CACHE_DIR = process.env.LOCALAPPDATA
+  ? path.join(process.env.LOCALAPPDATA, APP_NAME, 'hf-cache')
+  : path.join(app.getPath('userData'), 'hf-cache');
+
+function migrateOldData() {
+  const userData = app.getPath('userData');
+  if (!fs.existsSync(userData)) {
+    const old = OLD_NAMES.map((n) => path.join(app.getPath('appData'), n)).find((p) => fs.existsSync(p));
+    if (old) {
+      try {
+        fs.cpSync(old, userData, { recursive: true });
+        console.log(`[migrate] ${old} → ${userData}`);
+      } catch (err) {
+        console.warn('[migrate] 設定を移せませんでした', err.message);
+      }
+    }
+  }
+  if (!fs.existsSync(MODEL_CACHE_DIR)) {
+    const old = OLD_NAMES.map((n) => path.join(CACHE_ROOT, n, 'hf-cache')).find((p) => fs.existsSync(p));
+    if (old) {
+      try {
+        fs.mkdirSync(path.dirname(MODEL_CACHE_DIR), { recursive: true });
+        fs.renameSync(old, MODEL_CACHE_DIR); // 同じドライブなので一瞬で移る
+        console.log(`[migrate] ${old} → ${MODEL_CACHE_DIR}`);
+      } catch (err) {
+        console.warn('[migrate] モデルを移せませんでした（もう一度ダウンロードされます）', err.message);
+      }
+    }
+  }
+}
+migrateOldData();
+
 // config.json は共通の設定（アプリに同梱）、config.local.json はこの PC だけの設定
 // （読み込んだキャラ、選択中のキャラなど）。local の方が優先される。
 // インストールしたアプリは自分のフォルダに書き込めないので、local 設定と読み込んだモデルは
@@ -380,7 +420,7 @@ function loadKokoro() {
   if (kokoroPromise) return kokoroPromise;
   kokoroPromise = (async () => {
     const { env } = await import('@huggingface/transformers');
-    env.cacheDir = path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'desktop-mate', 'hf-cache');
+    env.cacheDir = MODEL_CACHE_DIR;
     const { KokoroTTS } = await import('kokoro-js');
     const tts = await KokoroTTS.from_pretrained(config.voice.kokoroModel || 'onnx-community/Kokoro-82M-v1.0-ONNX', {
       dtype: config.voice.kokoroDtype || 'q8',
@@ -433,7 +473,7 @@ function loadAsr() {
   asrPromise = (async () => {
     const { pipeline, env } = await import('@huggingface/transformers');
     // node_modules 配下だと Windows のパス長制限(260文字)を超えるので短い場所に置く
-    env.cacheDir = path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'desktop-mate', 'hf-cache');
+    env.cacheDir = MODEL_CACHE_DIR;
     const opts = {
       dtype: config.stt.dtype || { encoder_model: 'q8', decoder_model_merged: 'q4' },
       progress_callback: (p) => asrProgress?.(p),

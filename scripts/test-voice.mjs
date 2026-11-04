@@ -4,7 +4,7 @@ import { pipeline, env } from '@huggingface/transformers';
 import path from 'path';
 
 // node_modules 配下だと Windows のパス長制限(260文字)を超えるので短い場所に置く
-env.cacheDir = path.join(process.env.LOCALAPPDATA, 'desktop-mate', 'hf-cache');
+env.cacheDir = path.join(process.env.LOCALAPPDATA, 'Deskroid', 'hf-cache');
 
 const device = process.argv[2] || 'dml';
 const model = process.argv[3] || 'onnx-community/whisper-large-v3-turbo';

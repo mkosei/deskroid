@@ -13,7 +13,7 @@ permissions:
 jobs:
   build:
     # 公開版のリポジトリでだけ動かす（非公開版から誤って配布しないように）
-    if: github.repository == 'mkosei/desktop_ai'
+    if: github.repository == 'mkosei/deskroid'
     strategy:
       fail-fast: false
       matrix:

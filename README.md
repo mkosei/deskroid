@@ -1,8 +1,8 @@
-# desktop_ai
+# Deskroid
 
 English | [日本語](README.ja.md)
 
-A conversational AI that lives on your desktop. Your favorite character (Live2D or 3D) sits in the corner of the screen, and you can talk to it by text or by voice.
+Deskroid is a talking character that lives on your desktop. Your favorite character (Live2D or 3D) sits in the corner of the screen, and you can talk to it by text or by voice.
 Chat, speech recognition and text-to-speech all run locally, so there are no cloud API keys or usage fees.
 
 > The app works in **English** and **Japanese**. It follows your OS language by default, and you can switch from the right-click menu → "Language / 言語".
@@ -49,22 +49,22 @@ They are licensed separately from the app's MIT license. See [assets/avatars/LIC
 
 ## Installation
 
-Download the installer for your OS from [Releases](https://github.com/mkosei/desktop_ai/releases).
+Download the installer for your OS from [Releases](https://github.com/mkosei/deskroid/releases).
 
 | OS | File |
 |---|---|
-| Windows | `DesktopAI-Setup-<version>.exe` |
-| Mac (Apple silicon: M1 or later) | `DesktopAI-<version>-arm64.dmg` |
-| Mac (Intel) | `DesktopAI-<version>-x64.dmg` |
+| Windows | `Deskroid-Setup-<version>.exe` |
+| Mac (Apple silicon: M1 or later) | `Deskroid-<version>-arm64.dmg` |
+| Mac (Intel) | `Deskroid-<version>-x64.dmg` |
 
 - **Windows**: Double-click to install. If you see "Windows protected your PC", click "More info" → "Run anyway" (the app is not code-signed).
-  A "デスクトップAI" (Desktop AI) shortcut is added to the desktop and the Start menu
+  A "Deskroid" shortcut is added to the desktop and the Start menu
 - **Mac**: Open the dmg and drag the app into the Applications folder.
   The app is not signed, so the first time, right-click it in Finder and choose "Open".
   If it still won't open, run this in Terminal:
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/DesktopAI.app
+xattr -dr com.apple.quarantine /Applications/Deskroid.app
 ```
 
 ### First-run setup
@@ -88,10 +88,10 @@ It also opens automatically at startup if the app can't reach Ollama.
 Requires [Node.js](https://nodejs.org/) LTS.
 
 ```bash
-git clone https://github.com/mkosei/desktop_ai.git
+git clone https://github.com/mkosei/deskroid.git
 ```
 ```bash
-cd desktop_ai
+cd deskroid
 ```
 ```bash
 npm install
@@ -205,8 +205,8 @@ Where `config.local.json` and imported models (`models/`) are stored (the data f
 
 | How you run the app | Location |
 |---|---|
-| Installed (Windows) | `%APPDATA%\desktop-mate` |
-| Installed (Mac) | `~/Library/Application Support/desktop-mate` |
+| Installed (Windows) | `%APPDATA%\Deskroid` |
+| Installed (Mac) | `~/Library/Application Support/Deskroid` |
 | From source | The app folder |
 
 You can open `config.local.json` directly from the right-click menu → "Open character settings".
