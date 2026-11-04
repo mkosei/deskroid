@@ -1,24 +1,67 @@
-// AI が呼び出せるツール（アプリを開く・天気を調べる）
+// AI が呼び出せるツール（アプリ・サイト・フォルダを開く、Web で調べる、天気を調べる）
 // Electron に依存しないようにして、scripts/test-tools.mjs からも同じものを使えるようにしている
 // lang は 'ja' か 'en'。AI への説明と結果の文を、その言語で返す
+// 安全のため、AI にできるのは「開く」「調べる」だけ。コマンドの実行やファイルの削除などはさせない
+const { findApp } = require('./pc-apps');
 
 // 小さいモデルはキャラ設定と一緒だとツールを呼ばなくなるので、判定専用のプロンプトで呼ばせる
 const ROUTER_PROMPTS = {
   ja: [
     'あなたはユーザーの依頼を判定する係です。ユーザーの最後の発言を見て、必要なツールを呼び出してください。',
-    '- サイトやアプリを開く・その中で検索する依頼 → open_app',
+    '- パソコンに入っているアプリを開く・起動する → open_app（name にはアプリの一覧の名前を入れる）',
+    '- YouTube や Amazon などの Web サイトを開く・そのサイトの中で探す → open_website',
+    '- サイトを指定せずに「〜を調べて」「〜って何？を検索して」→ web_search',
+    '- ダウンロード・ドキュメント・デスクトップなどのフォルダを開く → open_folder',
     '- 天気・気温・雨・傘などを聞かれた → get_weather',
-    'どれにも当てはまらない発言には、ツールを呼ばず「なし」とだけ答えてください。',
+    'アプリとサイトの両方がある名前（Spotify、Discord など）は、入っていればアプリを開く。',
+    '一覧にないアプリを頼まれても、似た別のアプリに置き換えず、言われた名前のまま name に入れる（例: 一覧に Chrome がなくても name は "Chrome"。Microsoft Edge にしない）。',
+    '普通の会話や質問（「今日疲れた」「おすすめの映画は？」など）には、ツールを呼ばず「なし」とだけ答えてください。',
   ].join('\n'),
   en: [
     "You decide which tools the user's request needs. Look at the user's last message and call the tools it needs.",
-    '- Requests to open a site or app, or to search inside one → open_app',
+    '- Open or launch an app installed on the computer → open_app (put a name from the app list in name)',
+    '- Open a website such as YouTube or Amazon, or search inside it → open_website',
+    '- "Look up ..." or "search for ..." without naming a site → web_search',
+    '- Open a folder such as Downloads, Documents or Desktop → open_folder',
     '- Questions about the weather, temperature, rain, umbrellas and so on → get_weather',
-    'If the message matches none of these, do not call any tool and reply only with "none".',
+    'If something exists both as an app and a website (Spotify, Discord, ...), open the app when it is installed.',
+    'If the requested app is not in the list, do not swap in a similar app; put the name exactly as the user said it (e.g. if Chrome is not listed, name is "Chrome", not Microsoft Edge).',
+    'For ordinary chat or questions ("I\'m tired", "any movie recommendations?"), do not call any tool and reply only with "none".',
   ].join('\n'),
 };
 const routerPrompt = (lang) => ROUTER_PROMPTS[lang] || ROUTER_PROMPTS.ja;
 const ROUTER_PROMPT = ROUTER_PROMPTS.ja;
+
+// よく使うサイト。config.apps に URL で書いたものも、ここに足される（同じキーなら config の方が優先）
+const SITES = {
+  google: { name: 'Google', open: 'https://www.google.com/', search: 'https://www.google.com/search?q={query}' },
+  youtube: { name: 'YouTube', open: 'https://www.youtube.com/', search: 'https://www.youtube.com/results?search_query={query}' },
+  x: { name: 'X', open: 'https://x.com/home', search: 'https://x.com/search?q={query}' },
+  github: { name: 'GitHub', open: 'https://github.com/', search: 'https://github.com/search?q={query}' },
+  amazon: {
+    name: 'Amazon',
+    open: { ja: 'https://www.amazon.co.jp/', en: 'https://www.amazon.com/' },
+    search: { ja: 'https://www.amazon.co.jp/s?k={query}', en: 'https://www.amazon.com/s?k={query}' },
+  },
+  wikipedia: {
+    name: 'Wikipedia',
+    open: { ja: 'https://ja.wikipedia.org/', en: 'https://en.wikipedia.org/' },
+    search: { ja: 'https://ja.wikipedia.org/w/index.php?search={query}', en: 'https://en.wikipedia.org/w/index.php?search={query}' },
+  },
+  maps: { name: 'Google Maps', open: 'https://www.google.com/maps', search: 'https://www.google.com/maps/search/{query}' },
+  gmail: { name: 'Gmail', open: 'https://mail.google.com/', search: 'https://mail.google.com/mail/u/0/#search/{query}' },
+  spotify: { name: 'Spotify', open: 'https://open.spotify.com/', search: 'https://open.spotify.com/search/{query}' },
+  netflix: { name: 'Netflix', open: 'https://www.netflix.com/', search: 'https://www.netflix.com/search?q={query}' },
+  chatgpt: { name: 'ChatGPT', open: 'https://chatgpt.com/', search: 'https://chatgpt.com/?q={query}' },
+};
+const SEARCH_URL = 'https://www.google.com/search?q={query}';
+
+// 開けるフォルダ（実際の場所は main.js から ctx.folders で渡す）
+const FOLDERS = ['downloads', 'documents', 'desktop', 'pictures', 'music', 'videos', 'home'];
+const FOLDER_NAMES = {
+  ja: { downloads: 'ダウンロード', documents: 'ドキュメント', desktop: 'デスクトップ', pictures: 'ピクチャ', music: 'ミュージック', videos: 'ビデオ', home: 'ホーム' },
+  en: { downloads: 'Downloads', documents: 'Documents', desktop: 'Desktop', pictures: 'Pictures', music: 'Music', videos: 'Videos', home: 'Home' },
+};
 
 // WMO 天気コード → 日本語 / 英語
 const WEATHER_CODES = {
@@ -47,7 +90,7 @@ const DAY_LABELS = {
 };
 
 // 英語のときの表示名。name_en があればそれを使い、なければ「Prime Video（プライムビデオ）」の括弧の読みを外す
-function appName(entry, lang) {
+function displayName(entry, lang) {
   if (lang !== 'en') return entry.name;
   return entry.name_en || entry.name.replace(/[（(].*?[）)]/g, '').trim();
 }
@@ -60,36 +103,111 @@ function placeName(key, place, lang) {
   return place?.name_en || PLACE_EN[key] || key;
 }
 
-function buildTools(config, lang = 'ja') {
+const isUrl = (s) => /^https?:\/\//i.test(String(s || ''));
+const pick = (v, lang) => (v && typeof v === 'object' ? v[lang] || v.ja || v.en : v);
+
+// 開けるサイトの一覧（よく使うサイト + config.apps の URL のもの）
+function siteList(config) {
+  const sites = { ...SITES };
+  for (const [key, a] of Object.entries(config.apps || {})) {
+    if (isUrl(a.open)) sites[key] = a;
+  }
+  return sites;
+}
+
+// config.apps にローカルのパスで書いたもの（スタートメニューに出ないアプリなど）は、アプリとして扱う
+function customApps(config) {
+  return Object.entries(config.apps || {})
+    .filter(([, a]) => a.open && !isUrl(a.open))
+    .map(([key, a]) => ({ name: a.name || key, alt: [key], path: a.open }));
+}
+
+// apps: 入っているアプリの一覧（pc-apps.js の listApps）。AI がその中から名前を選べるよう説明に並べる
+function buildTools(config, lang = 'ja', apps = []) {
   const en = lang === 'en';
+  const sites = siteList(config);
   const tools = [];
 
-  const apps = Object.entries(config.apps || {});
   if (apps.length) {
+    const names = apps.map((a) => a.name).join(en ? ', ' : '、');
     tools.push({
       type: 'function',
       function: {
         name: 'open_app',
         description: en
-          ? "Open a site or app on the computer. If there is something to search for, put it in query to open that site's search results."
-          : 'サイトやアプリをパソコンで開く。検索したい言葉があれば query に入れると、そのサイト内の検索結果を開く。',
+          ? `Launch an app installed on this computer. Installed apps: ${names}`
+          : `このパソコンに入っているアプリを起動する。入っているアプリ: ${names}`,
         parameters: {
           type: 'object',
           properties: {
-            app: {
+            name: {
               type: 'string',
-              enum: apps.map(([key]) => key),
-              description: en
-                ? `What to open. ${apps.map(([key, a]) => `${key}=${appName(a, lang)}`).join(', ')}`
-                : `開くもの。${apps.map(([key, a]) => `${key}=${a.name}`).join('、')}`,
+              description: en ? 'The app name, chosen from the installed apps' : 'アプリの名前。入っているアプリの一覧から選ぶ',
             },
-            query: { type: 'string', description: en ? 'What to search for (optional)' : '検索したい言葉（任意）' },
           },
-          required: ['app'],
+          required: ['name'],
         },
       },
     });
   }
+
+  tools.push({
+    type: 'function',
+    function: {
+      name: 'open_website',
+      description: en
+        ? "Open a website in the browser. If there is something to search for, put it in query to open that site's search results."
+        : 'Web サイトをブラウザで開く。探したい言葉があれば query に入れると、そのサイトの中の検索結果を開く。',
+      parameters: {
+        type: 'object',
+        properties: {
+          site: {
+            type: 'string',
+            enum: Object.keys(sites),
+            description: en
+              ? `Which site. ${Object.entries(sites).map(([k, s]) => `${k}=${displayName(s, lang)}`).join(', ')}`
+              : `開くサイト。${Object.entries(sites).map(([k, s]) => `${k}=${s.name}`).join('、')}`,
+          },
+          query: { type: 'string', description: en ? 'What to search for on that site (optional)' : 'そのサイトで探したい言葉（任意）' },
+          url: { type: 'string', description: en ? 'A full URL, only when the site is not in the list (optional)' : '一覧にないサイトのときだけ、https:// から始まる URL（任意）' },
+        },
+      },
+    },
+  });
+
+  tools.push({
+    type: 'function',
+    function: {
+      name: 'web_search',
+      description: en ? 'Search the web in the browser.' : 'ブラウザで Web 検索をする。',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string', description: en ? 'What to search for' : '検索する言葉' } },
+        required: ['query'],
+      },
+    },
+  });
+
+  tools.push({
+    type: 'function',
+    function: {
+      name: 'open_folder',
+      description: en ? 'Open a folder on this computer.' : 'パソコンのフォルダを開く。',
+      parameters: {
+        type: 'object',
+        properties: {
+          folder: {
+            type: 'string',
+            enum: FOLDERS,
+            description: en
+              ? FOLDERS.map((f) => `${f}=${FOLDER_NAMES.en[f]}`).join(', ')
+              : FOLDERS.map((f) => `${f}=${FOLDER_NAMES.ja[f]}`).join('、'),
+          },
+        },
+        required: ['folder'],
+      },
+    },
+  });
 
   const placeMap = config.weather?.places || {};
   const places = Object.keys(placeMap);
@@ -126,23 +244,62 @@ function buildTools(config, lang = 'ja') {
   return tools;
 }
 
-// config.apps に登録されたものだけを開く（URL かローカルのパス）
-async function openApp({ app: key, query }, { config, shell, lang }) {
+// 入っているアプリから一番近いものを起動する
+async function openApp({ name }, ctx) {
+  const { apps = [], launchApp, shell, lang, config } = ctx;
   const en = lang === 'en';
-  const entry = config.apps?.[key];
-  if (!entry) return en ? `"${key}" isn't registered, so it couldn't be opened.` : `「${key}」は登録されていないので開けませんでした。`;
-  const name = appName(entry, lang);
-  const target = query && entry.search
-    ? entry.search.replace('{query}', encodeURIComponent(query))
-    : entry.open;
-  if (/^https?:\/\//.test(target)) {
-    await shell.openExternal(target);
-  } else {
-    const err = await shell.openPath(target);
-    if (err) return en ? `Couldn't open ${name}: ${err}` : `${name} を開けませんでした: ${err}`;
+  const { app, candidates } = findApp(apps, name);
+  if (!app) {
+    // アプリが入っていなくても、同じ名前のサイトがあればそちらを開く（YouTube、Spotify など）
+    const key = String(name || '').normalize('NFKC').toLowerCase().replace(/\s+/g, '');
+    const site = Object.entries(siteList(config)).find(([k, s]) => k === key || s.name.toLowerCase().replace(/\s+/g, '') === key);
+    if (site) return openWebsite({ site: site[0] }, ctx);
+    if (en) return `Couldn't find an app called "${name}" on this computer.${candidates.length ? ` Similar apps: ${candidates.join(', ')}.` : ''}`;
+    return `「${name}」というアプリは、このパソコンに見つかりませんでした。${candidates.length ? `近いもの: ${candidates.join('、')}。` : ''}`;
   }
-  if (en) return query ? `Opened a search for "${query}" on ${name}.` : `Opened ${name}.`;
-  return query ? `${name} で「${query}」を検索して開きました。` : `${name} を開きました。`;
+  try {
+    await launchApp(app, shell);
+  } catch (err) {
+    return en ? `Couldn't open ${app.name}: ${err.message}` : `${app.name} を開けませんでした: ${err.message}`;
+  }
+  return en ? `Opened ${app.name}.` : `${app.name} を開きました。`;
+}
+
+// サイトを開く（一覧のサイト、その中の検索、または https の URL）
+async function openWebsite({ site, query, url }, { config, shell, lang }) {
+  const en = lang === 'en';
+  const entry = siteList(config)[site];
+  if (entry) {
+    const name = displayName(entry, lang);
+    const searchUrl = pick(entry.search, lang);
+    const target = query && searchUrl ? searchUrl.replace('{query}', encodeURIComponent(query)) : pick(entry.open, lang);
+    await shell.openExternal(target);
+    if (en) return query ? `Opened a search for "${query}" on ${name}.` : `Opened ${name}.`;
+    return query ? `${name} で「${query}」を検索して開きました。` : `${name} を開きました。`;
+  }
+  if (isUrl(url)) {
+    await shell.openExternal(url);
+    return en ? `Opened ${url}.` : `${url} を開きました。`;
+  }
+  if (query) return webSearch({ query }, { shell, lang });
+  return en ? `I don't know a site called "${site || url}", so I couldn't open it.` : `「${site || url}」というサイトがわからず、開けませんでした。`;
+}
+
+async function webSearch({ query }, { shell, lang }) {
+  const en = lang === 'en';
+  if (!query) return en ? 'There was nothing to search for.' : '検索する言葉がありませんでした。';
+  await shell.openExternal(SEARCH_URL.replace('{query}', encodeURIComponent(query)));
+  return en ? `Searched the web for "${query}".` : `「${query}」を Web で検索しました。`;
+}
+
+async function openFolder({ folder }, { folders = {}, shell, lang }) {
+  const en = lang === 'en';
+  const dir = folders[folder];
+  const name = (en ? FOLDER_NAMES.en : FOLDER_NAMES.ja)[folder] || folder;
+  if (!dir) return en ? `I don't know the folder "${folder}".` : `「${folder}」というフォルダはわかりませんでした。`;
+  const err = await shell.openPath(dir);
+  if (err) return en ? `Couldn't open the ${name} folder: ${err}` : `${name}フォルダを開けませんでした: ${err}`;
+  return en ? `Opened the ${name} folder.` : `${name}フォルダを開きました。`;
 }
 
 // Open-Meteo（無料・登録不要）で天気予報を取る
@@ -187,8 +344,15 @@ async function getWeather({ place, day }, { config, lang }) {
   return lines.join(' / ');
 }
 
-const HANDLERS = { open_app: openApp, get_weather: getWeather };
+const HANDLERS = {
+  open_app: openApp,
+  open_website: openWebsite,
+  web_search: webSearch,
+  open_folder: openFolder,
+  get_weather: getWeather,
+};
 
+// ctx: { config, shell, lang, apps, launchApp, folders }
 async function runTool(name, args, ctx) {
   const en = ctx?.lang === 'en';
   const handler = HANDLERS[name];
@@ -204,12 +368,14 @@ async function runTool(name, args, ctx) {
 function resultNote(results, lang = 'ja') {
   if (lang === 'en') {
     return `(System note: you just carried out this request. Result: ${results.join(' ')} `
-      + 'Tell the user about it briefly and naturally. If you opened an app, say that you just opened it, like "There you go, it\'s open!". '
+      + 'Tell the user about it briefly and naturally. If you opened something, say that you just opened it, like "There you go, it\'s open!". '
+      + "If it failed or wasn't found, say so honestly. "
       + "For the weather, don't just list the numbers; tell them what matters, like rain or what to wear, in a conversational way.)";
   }
   return `（システムより：あなたが今この依頼を実行しました。結果: ${results.join(' ')} `
-    + 'この結果をもとに短く自然に伝えてください。アプリを開いた場合は「開いたよ」のように今開いたことを伝え、'
+    + 'この結果をもとに短く自然に伝えてください。何かを開いた場合は「開いたよ」のように今開いたことを伝え、'
+    + '見つからなかったり失敗したりした場合は正直にそう伝えてください。'
     + '天気の場合は数字をそのまま並べず、雨や服装など大事なところを話し言葉で伝えてください）';
 }
 
-module.exports = { ROUTER_PROMPT, routerPrompt, buildTools, runTool, resultNote };
+module.exports = { ROUTER_PROMPT, routerPrompt, buildTools, runTool, resultNote, customApps };

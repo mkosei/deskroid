@@ -4,7 +4,8 @@ const fs = require('fs');
 const os = require('os');
 const { spawn } = require('child_process');
 const { pathToFileURL } = require('url');
-const { routerPrompt, buildTools, runTool, resultNote } = require('./tools');
+const { routerPrompt, buildTools, runTool, resultNote, customApps } = require('./tools');
+const { listApps, launchApp } = require('./pc-apps');
 const { MODEL_FILTERS, importModel, defaultPersona } = require('./model-import');
 const setup = require('./setup');
 const { strings } = require('./i18n');
@@ -329,8 +330,22 @@ async function streamOllama(messages, tools, onText) {
 }
 
 // ①判定役としてツールを使うか決めて実行 → ②キャラとして結果を踏まえて返事、の2段階にする
+// ツールに渡す、このパソコンの情報（入っているアプリ、よく使うフォルダの場所）
+async function toolContext() {
+  const folders = {};
+  for (const [key, name] of Object.entries({
+    downloads: 'downloads', documents: 'documents', desktop: 'desktop',
+    pictures: 'pictures', music: 'music', videos: 'videos', home: 'home',
+  })) {
+    try { folders[key] = app.getPath(name); } catch {}
+  }
+  const apps = await listApps({ extra: customApps(config) });
+  return { config, shell, lang: config.lang, apps, launchApp, folders };
+}
+
 async function runTools(messages) {
-  const tools = buildTools(config, config.lang);
+  const ctx = await toolContext();
+  const tools = buildTools(config, config.lang, ctx.apps);
   if (!tools.length) return [];
   const recent = messages.filter((m) => m.role !== 'system').slice(-4);
   const { toolCalls } = await streamOllama([{ role: 'system', content: routerPrompt(config.lang) }, ...recent], tools, () => {});
@@ -338,7 +353,7 @@ async function runTools(messages) {
   const results = [];
   for (const call of toolCalls) {
     const { name, arguments: args } = call.function;
-    const result = await runTool(name, args, { config, shell, lang: config.lang });
+    const result = await runTool(name, args, ctx);
     console.log(`[tool] ${name}(${JSON.stringify(args)}) -> ${result}`);
     results.push(result);
   }
@@ -770,6 +785,7 @@ app.whenReady().then(async () => {
     if (!ollamaOk) openSetupWindow();
   }
   ensureVoicevox();
+  listApps().catch(() => {}); // 最初の「〇〇開いて」を待たせないよう、アプリの一覧を先に集めておく
 
   for (const name of registerHotkeys(config.hotkeys)) {
     console.warn(`ホットキーを登録できませんでした（他のアプリが使用中かも）: ${name}=${config.hotkeys[name]}`);

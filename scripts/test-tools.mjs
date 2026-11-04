@@ -1,28 +1,62 @@
-// ツール呼び出しの動作確認。本体と同じ tools.js を使い、
-// 「①判定役がツールを呼ぶ → ②キャラとして返事」の2段階で試す（アプリは実際には開かない）
-// 使い方: node scripts/test-tools.mjs [発言 ...]
+// ツール呼び出しの動作確認。本体と同じ tools.js / pc-apps.js を使い、
+// 「①判定役がツールを呼ぶ → ②キャラとして返事」の2段階で試す（アプリやサイトは実際には開かない）
+// 使い方: node scripts/test-tools.mjs [--en] [--no-reply] [発言 ...]
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const { ROUTER_PROMPT, buildTools, runTool, resultNote } = require('../tools.js');
+const { routerPrompt, buildTools, runTool, resultNote, customApps } = require('../tools.js');
+const { listApps } = require('../pc-apps.js');
 
+const args = process.argv.slice(2);
+const lang = args.includes('--en') ? 'en' : 'ja';
+const withReply = !args.includes('--no-reply');
 const raw = JSON.parse(fs.readFileSync(new URL('../config.json', import.meta.url), 'utf8'));
 const config = { ...raw, ...raw.characters?.[raw.activeCharacter] };
-const tools = buildTools(config);
-const fakeShell = { openExternal: async () => {}, openPath: async () => '' };
-const tags = Object.keys(config.expressions);
-const persona = `${config.persona}\n\n返事の先頭には、そのときの気持ちに合うタグを必ず1つ付けてください。使えるタグ: ${tags.map((t) => `[${t}]`).join(' ')}\n例: [smile] おはよう、今日も早いですね。`;
+const persona = lang === 'en' ? config.persona_en || config.persona : config.persona;
 
-const prompts = process.argv.length > 2 ? process.argv.slice(2) : [
+// 実際には開かず、何を開こうとしたかだけ記録する
+const opened = [];
+const fakeShell = {
+  openExternal: async (url) => { opened.push(`url ${url}`); },
+  openPath: async (p) => { opened.push(`path ${p}`); return ''; },
+};
+const fakeLaunch = async (app) => { opened.push(`app ${app.name}`); };
+const home = os.homedir();
+const folders = {
+  downloads: path.join(home, 'Downloads'), documents: path.join(home, 'Documents'), desktop: path.join(home, 'Desktop'),
+  pictures: path.join(home, 'Pictures'), music: path.join(home, 'Music'), videos: path.join(home, 'Videos'), home,
+};
+const apps = await listApps({ extra: customApps(config) });
+const ctx = { config, shell: fakeShell, lang, apps, launchApp: fakeLaunch, folders };
+const tools = buildTools(config, lang, apps);
+
+const prompts = args.filter((a) => !a.startsWith('--')).length ? args.filter((a) => !a.startsWith('--')) : lang === 'en' ? [
+  'Open YouTube',
+  'Can you launch Discord?',
+  'Open the calculator',
+  'Search GitHub for electron',
+  'Look up how to make carbonara',
+  'Open my downloads folder',
+  'Will it rain in Chiba tomorrow?',
+  "I'm so tired today.",
+] : [
   'YouTube開いて',
+  'ディスコード起動して',
+  '電卓出して',
+  'メモ帳開いてくれる？',
+  'エクセル使いたい',
   'githubでelectronを検索して',
-  'Claude開いて',
-  '今日の天気は？',
+  'アマゾンでワイヤレスイヤホン探して',
+  'カルボナーラの作り方調べて',
+  'ダウンロードフォルダ開いて',
+  '設定開いて',
+  'Chrome開いて',
   '明日千葉って雨降る？',
-  '東京の明後日の気温教えて',
-  '傘いるかな',
   '今日はつかれたなあ',
+  'おすすめの映画ある？',
 ];
 
 async function chat(messages, withTools) {
@@ -34,16 +68,21 @@ async function chat(messages, withTools) {
   return (await res.json()).message;
 }
 
+console.log(`apps: ${apps.length}, lang: ${lang}`);
 for (const p of prompts) {
   const t = Date.now();
-  const routed = await chat([{ role: 'system', content: ROUTER_PROMPT }, { role: 'user', content: p }], true);
+  opened.length = 0;
+  const routed = await chat([{ role: 'system', content: routerPrompt(lang) }, { role: 'user', content: p }], true);
   const calls = routed.tool_calls || [];
   const results = [];
-  for (const c of calls) results.push(await runTool(c.function.name, c.function.arguments, { config, shell: fakeShell }));
-  const user = results.length ? `${p}\n\n${resultNote(results)}` : p;
-  const reply = await chat([{ role: 'system', content: persona }, { role: 'user', content: user }], false);
-  const label = calls.map((c) => `${c.function.name}(${JSON.stringify(c.function.arguments)})`).join(', ') || '(ツールなし)';
-  console.log(`「${p}」 -> ${label}`);
-  if (results.length) console.log(`    結果: ${results.join(' ')}`);
-  console.log(`    返事: ${reply.content.replace(/\n/g, ' ')} (${Date.now() - t}ms)`);
+  for (const c of calls) results.push(await runTool(c.function.name, c.function.arguments, ctx));
+  const label = calls.map((c) => `${c.function.name}(${JSON.stringify(c.function.arguments)})`).join(', ') || '(no tool)';
+  console.log(`「${p}」 -> ${label}  [${Date.now() - t}ms]`);
+  if (opened.length) console.log(`    opened: ${opened.join(' / ')}`);
+  if (results.length) console.log(`    result: ${results.join(' ')}`);
+  if (withReply) {
+    const user = results.length ? `${p}\n\n${resultNote(results, lang)}` : p;
+    const reply = await chat([{ role: 'system', content: persona }, { role: 'user', content: user }], false);
+    console.log(`    reply: ${reply.content.replace(/\n/g, ' ')}`);
+  }
 }

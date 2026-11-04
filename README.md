@@ -26,7 +26,8 @@ Chat, speech recognition and text-to-speech all run locally, so there are no clo
 
 - Chat in speech bubbles (expressions and gestures change with the mood of each reply)
 - Voice conversation (microphone → transcription → spoken reply with lip sync)
-- Open sites by asking, e.g. "open YouTube" or "search GitHub for electron"
+- Open apps installed on your PC just by naming them, e.g. "open the calculator" or "launch Discord" (the app list is read from your PC, so no setup is needed)
+- Open websites, search inside them, search the web, and open folders, e.g. "find wireless earbuds on Amazon", "look up how to make carbonara", "open my Downloads folder"
 - Ask for the weather forecast, e.g. "what's the weather tomorrow?"
 - Import your own models (Live2D / 3D) and switch between characters
 - 3D models: bones are detected automatically to add eye contact, breathing, waving, standing poses and leg crossing
@@ -166,7 +167,8 @@ Right-click menu:
 
 Example requests:
 
-- "Open YouTube", "Find cat videos on YouTube", "Open X"
+- "Open the calculator", "Launch Discord", "Open Excel"
+- "Open YouTube", "Find cat videos on YouTube", "Look up how to make carbonara", "Open my Downloads folder"
 - "What's the weather today?", "Will it rain in Chiba tomorrow?"
 
 ## Importing a model
@@ -232,7 +234,7 @@ Main keys:
 | `language` | `"auto"` (match the OS, default), `"en"` or `"ja"`. The "Language / 言語" menu saves this to `config.local.json` |
 | `ollamaModel` | The Ollama model used for chat (e.g. `qwen3:14b`) |
 | `hotkeys` | Keys for `listenOnce` (listen once) and `voiceChat` (voice conversation on/off). Can be set per OS, e.g. `{ "win": "Control+Space", "mac": "Alt+Space" }`. The "Hotkey settings…" screen is the easiest way to change them (saved to `config.local.json`) |
-| `apps` | Sites and apps the character can open. `open` is a URL or path; `search` is a search URL containing `{query}` |
+| `apps` | Extra sites and apps the character can open (installed apps and common sites like Google, YouTube and Amazon work without this). `open` is a URL or a path to an app; `search` is a search URL containing `{query}`. Use a path for apps that are not in the Start menu / Applications folder |
 | `weather.places` | Locations for weather lookups (name, latitude and longitude; `name_en` sets the English name) |
 | `voice` | Voice settings: Kokoro voice (`enVoice`) and speed (`enSpeed`) for English; VOICEVOX URL, speaker ID and speaking speed for Japanese |
 | `stt` | Speech recognition model, device and precision |
