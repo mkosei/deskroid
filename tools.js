@@ -5,13 +5,15 @@
 // 安全のため、AI にできるのは「開く」「調べる」「音量・再生」「タイマー」だけ。コマンドの実行やファイルの削除などはさせない
 const { findApp } = require('./pc-apps');
 const { MEDIA_ACTIONS } = require('./pc-control');
+const { resolveYouTube, resolvePrimeVideo } = require('./content-resolve');
 
 // 小さいモデルはキャラ設定と一緒だとツールを呼ばなくなるので、判定専用のプロンプトで呼ばせる
 const ROUTER_PROMPTS = {
   ja: [
     'あなたはユーザーの依頼を判定して、ツールで実行する係です。ユーザーの最後の発言を見て、必要なツールを呼び出してください。',
     '- パソコンに入っているアプリを開く・起動する → open_app（name にはアプリの一覧の名前を入れる）',
-    '- YouTube や Amazon などの Web サイトを開く・そのサイトの中で探す → open_website',
+    '- YouTube のチャンネル・動画や、プライムビデオの作品を、名前を言って開く・見る・流す（「YouTube でヒカキン開いて」「プライムビデオでハンターハンター見たい」）→ open_content',
+    '- YouTube や Amazon などの Web サイトを開く・そのサイトの中で「探して」「検索して」→ open_website',
     '- サイトを指定せずに「〜を調べて」「〜って何？を検索して」→ web_search',
     '- ダウンロード・ドキュメント・デスクトップなどのフォルダを開く → open_folder',
     '- 天気・気温・雨・傘などを聞かれた → get_weather',
@@ -32,7 +34,8 @@ const ROUTER_PROMPTS = {
   en: [
     "You decide which tools the user's request needs and carry it out. Look at the user's last message and call the tools it needs.",
     '- Open or launch an app installed on the computer → open_app (put a name from the app list in name)',
-    '- Open a website such as YouTube or Amazon, or search inside it → open_website',
+    '- Open / watch / play a specific YouTube channel or video, or a Prime Video title, by name ("open HikakinTV on YouTube", "I want to watch Hunter x Hunter on Prime Video") → open_content',
+    '- Open a website such as YouTube or Amazon, or "search" / "look for" something inside it → open_website',
     '- "Look up ..." or "search for ..." without naming a site → web_search',
     '- Open a folder such as Downloads, Documents or Desktop → open_folder',
     '- Questions about the weather, temperature, rain, umbrellas and so on → get_weather',
@@ -193,6 +196,31 @@ function buildTools(config, lang = 'ja', apps = []) {
           query: { type: 'string', description: en ? 'What to search for on that site (optional)' : 'そのサイトで探したい言葉（任意）' },
           url: { type: 'string', description: en ? 'A full URL, only when the site is not in the list (optional)' : '一覧にないサイトのときだけ、https:// から始まる URL（任意）' },
         },
+      },
+    },
+  });
+
+  tools.push({
+    type: 'function',
+    function: {
+      name: 'open_content',
+      description: en
+        ? 'Open a specific YouTube channel or video, or a Prime Video title, directly by name (not the search results).'
+        : 'YouTube のチャンネル・動画や、プライムビデオの作品を、名前から探して直接開く（検索結果ではなく、そのページを開く）。',
+      parameters: {
+        type: 'object',
+        properties: {
+          site: { type: 'string', enum: ['youtube', 'primevideo'], description: en ? 'youtube or primevideo' : 'youtube か primevideo' },
+          name: { type: 'string', description: en ? 'The channel, video or title name' : 'チャンネル名・動画・作品の名前' },
+          kind: {
+            type: 'string',
+            enum: ['channel', 'video', 'any'],
+            description: en
+              ? 'YouTube only: channel (a person / channel), video (a specific video, "play ..."), any (not sure)'
+              : 'YouTube のときだけ。channel=人・チャンネル、video=特定の動画・「〜流して」、any=どちらかわからない',
+          },
+        },
+        required: ['site', 'name'],
       },
     },
   });
@@ -390,6 +418,25 @@ async function openWebsite({ site, query, url }, { config, shell, lang }) {
   return en ? `I don't know a site called "${site || url}", so I couldn't open it.` : `「${site || url}」というサイトがわからず、開けませんでした。`;
 }
 
+// 名前から直接開く。見つからない・サイトに断られたときは、そのサイトの検索結果を開く
+async function openContent({ site, name, kind = 'any' }, ctx) {
+  const { shell, lang } = ctx;
+  const en = lang === 'en';
+  if (!name) return en ? 'There was no name to open.' : '開くものの名前がありませんでした。';
+  let hit = null;
+  try {
+    hit = site === 'primevideo' ? await resolvePrimeVideo(name, lang) : await resolveYouTube(name, kind, lang);
+  } catch (err) {
+    console.warn('[open_content]', err.message);
+  }
+  if (!hit) return openWebsite({ site: site === 'primevideo' ? 'primevideo' : 'youtube', query: name }, ctx);
+  await shell.openExternal(hit.url);
+  const where = site === 'primevideo' ? (en ? 'Prime Video' : 'プライムビデオ') : 'YouTube';
+  const what = hit.type === 'channel' ? (en ? 'channel' : 'チャンネル') : hit.type === 'video' ? (en ? 'video' : '動画') : (en ? 'title' : '作品');
+  const by = hit.channel ? (en ? ` by ${hit.channel}` : `（${hit.channel}）`) : '';
+  return en ? `Opened the ${where} ${what} "${hit.title}"${by}.` : `${where}の${what}「${hit.title}」${by}を開きました。`;
+}
+
 async function webSearch({ query }, { shell, lang }) {
   const en = lang === 'en';
   if (!query) return en ? 'There was nothing to search for.' : '検索する言葉がありませんでした。';
@@ -533,6 +580,7 @@ const HANDLERS = {
   open_app: openApp,
   open_website: openWebsite,
   web_search: webSearch,
+  open_content: openContent,
   open_folder: openFolder,
   get_weather: getWeather,
   media_control: mediaControlTool,

@@ -27,6 +27,7 @@ Chat, speech recognition and text-to-speech all run locally, so there are no clo
 - Chat in speech bubbles (expressions and gestures change with the mood of each reply)
 - Voice conversation (microphone → transcription → spoken reply with lip sync)
 - Open apps installed on your PC just by naming them, e.g. "open the calculator" or "launch Discord" (the app list is read from your PC, so no setup is needed)
+- Open a YouTube channel or video, or a Prime Video title, directly by name, e.g. "open HikakinTV on YouTube", "play lofi", "I want to watch Hunter x Hunter on Prime Video" (it looks up the top result and opens that page in your usual browser)
 - Open websites, search inside them, search the web, and open folders, e.g. "find wireless earbuds on Amazon", "look up how to make carbonara", "open my Downloads folder"
 - Ask for the weather forecast, e.g. "what's the weather tomorrow?"
 - Control the volume and playback, e.g. "turn the volume up a little", "pause the music", "next track"
