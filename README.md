@@ -29,6 +29,9 @@ Chat, speech recognition and text-to-speech all run locally, so there are no clo
 - Open apps installed on your PC just by naming them, e.g. "open the calculator" or "launch Discord" (the app list is read from your PC, so no setup is needed)
 - Open websites, search inside them, search the web, and open folders, e.g. "find wireless earbuds on Amazon", "look up how to make carbonara", "open my Downloads folder"
 - Ask for the weather forecast, e.g. "what's the weather tomorrow?"
+- Control the volume and playback, e.g. "turn the volume up a little", "pause the music", "next track"
+- Timers and reminders, e.g. "tell me in 3 minutes that my noodles are ready", "wake me up at 7:30" (the character tells you by speech bubble and voice; timers are cleared when the app quits)
+- Several requests at once, and requests that depend on a result, e.g. "open YouTube and turn the volume up", "if it rains tomorrow, remind me at 7 am to take an umbrella"
 - Import your own models (Live2D / 3D) and switch between characters
 - 3D models: bones are detected automatically to add eye contact, breathing, waving, standing poses and leg crossing
 - VRM models also blink, change facial expressions (happy, angry, sad, surprised), lip-sync, follow the cursor with their eyes, and have hair/clothes physics
@@ -168,6 +171,8 @@ Right-click menu:
 Example requests:
 
 - "Open the calculator", "Launch Discord", "Open Excel"
+- "Turn the volume up a little", "Pause the music", "Remind me in 5 minutes to check the oven", "Wake me up at 7:30"
+- "Open YouTube and turn the volume up", "If it rains tomorrow, remind me at 7 am to take an umbrella"
 - "Open YouTube", "Find cat videos on YouTube", "Look up how to make carbonara", "Open my Downloads folder"
 - "What's the weather today?", "Will it rain in Chiba tomorrow?"
 

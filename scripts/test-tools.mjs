@@ -7,7 +7,7 @@ import path from 'path';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const { routerPrompt, buildTools, runTool, resultNote, customApps } = require('../tools.js');
+const { buildTools, runAgent, resultNote, customApps } = require('../tools.js');
 const { listApps } = require('../pc-apps.js');
 
 const args = process.argv.slice(2);
@@ -24,13 +24,15 @@ const fakeShell = {
   openPath: async (p) => { opened.push(`path ${p}`); return ''; },
 };
 const fakeLaunch = async (app) => { opened.push(`app ${app.name}`); };
+const fakeMedia = async (action, steps) => { opened.push(`media ${action} x${steps}`); return true; };
+const fakeTimers = { add: (ms, message) => opened.push(`timer ${Math.round(ms / 1000)}s "${message}"`), cancelAll: () => 0 };
 const home = os.homedir();
 const folders = {
   downloads: path.join(home, 'Downloads'), documents: path.join(home, 'Documents'), desktop: path.join(home, 'Desktop'),
   pictures: path.join(home, 'Pictures'), music: path.join(home, 'Music'), videos: path.join(home, 'Videos'), home,
 };
 const apps = await listApps({ extra: customApps(config) });
-const ctx = { config, shell: fakeShell, lang, apps, launchApp: fakeLaunch, folders };
+const ctx = { config, shell: fakeShell, lang, apps, launchApp: fakeLaunch, folders, mediaControl: fakeMedia, timers: fakeTimers };
 const tools = buildTools(config, lang, apps);
 
 const prompts = args.filter((a) => !a.startsWith('--')).length ? args.filter((a) => !a.startsWith('--')) : lang === 'en' ? [
@@ -60,10 +62,11 @@ const prompts = args.filter((a) => !a.startsWith('--')).length ? args.filter((a)
 ];
 
 async function chat(messages, withTools) {
+  const body = { model: config.ollamaModel, messages, tools: withTools || undefined, stream: false, think: false };
   const res = await fetch(`${config.ollamaUrl}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: config.ollamaModel, messages, tools: withTools ? tools : undefined, stream: false, think: false }),
+    body: JSON.stringify(body),
   });
   return (await res.json()).message;
 }
@@ -72,11 +75,15 @@ console.log(`apps: ${apps.length}, lang: ${lang}`);
 for (const p of prompts) {
   const t = Date.now();
   opened.length = 0;
-  const routed = await chat([{ role: 'system', content: routerPrompt(lang) }, { role: 'user', content: p }], true);
-  const calls = routed.tool_calls || [];
-  const results = [];
-  for (const c of calls) results.push(await runTool(c.function.name, c.function.arguments, ctx));
-  const label = calls.map((c) => `${c.function.name}(${JSON.stringify(c.function.arguments)})`).join(', ') || '(no tool)';
+  const steps = [];
+  const results = await runAgent({
+    chat: async (msgs, t) => ({ toolCalls: (await chat(msgs, t)).tool_calls || [] }),
+    history: [{ role: 'user', content: p }],
+    tools,
+    ctx,
+    log: (step, name, args) => steps.push(`${step + 1}:${name}(${JSON.stringify(args)})`),
+  });
+  const label = steps.join(', ') || '(no tool)';
   console.log(`「${p}」 -> ${label}  [${Date.now() - t}ms]`);
   if (opened.length) console.log(`    opened: ${opened.join(' / ')}`);
   if (results.length) console.log(`    result: ${results.join(' ')}`);

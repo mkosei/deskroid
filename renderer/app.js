@@ -650,6 +650,17 @@ async function ask(text) {
   ]);
 }
 
+// タイマー・リマインダーの時間になった：驚いた顔で知らせて、声でも伝える
+window.mate.on('timer-fired', ({ message }) => {
+  character?.setExpression?.(config.expressions?.surprised, 'surprised');
+  clearTimeout(expressionTimer);
+  expressionTimer = setTimeout(() => character?.setExpression?.(config.expressions?.normal, 'normal'), 8000);
+  character?.tap?.();
+  showBubble(`⏰ ${message}`, '');
+  enqueueSpeech(message);
+  hideBubbleLater(30000);
+});
+
 window.mate.on('reset-chat', () => {
   stopSpeaking();
   history = [];

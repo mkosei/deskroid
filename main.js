@@ -1,10 +1,11 @@
-const { app, BrowserWindow, ipcMain, Menu, screen, globalShortcut, shell, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, screen, globalShortcut, shell, dialog, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { spawn } = require('child_process');
 const { pathToFileURL } = require('url');
-const { routerPrompt, buildTools, runTool, resultNote, customApps } = require('./tools');
+const { buildTools, runAgent, resultNote, customApps } = require('./tools');
+const { mediaControl } = require('./pc-control');
 const { listApps, launchApp } = require('./pc-apps');
 const { MODEL_FILTERS, importModel, defaultPersona } = require('./model-import');
 const setup = require('./setup');
@@ -343,26 +344,57 @@ async function toolContext() {
   return { config, shell, lang: config.lang, apps, launchApp, folders };
 }
 
+// タイマー・リマインダー（アプリを終了すると消える）。時間になったらキャラが吹き出しと声で知らせる
+const timers = new Set();
+
+// セットしたときのメモ（「薬飲むのを教えて」など）を、キャラの言葉で短く言い直す。失敗したらメモのまま
+async function timerLine(message) {
+  const note = config.lang === 'en'
+    ? `(System note: a timer the user asked you to set has just gone off. The note for it is "${message}". Tell the user about it in one short sentence, in character, without changing its meaning. Examples: note "tell me to take in the laundry" → "Time to take in the laundry!"; note "the tea is ready" → "Your tea is ready!". Do not add any [tag].)`
+    : `（システムより：ユーザーに頼まれていたタイマーの時間になりました。メモ:「${message}」。キャラとして、メモの意味を変えずに、一言で短く伝えてください。例: メモ「洗濯物取り込むの教えて」→「洗濯物を取り込む時間だよ」、メモ「お茶が入ったよ」→「お茶が入ったよ」。[タグ] は付けないでください）`;
+  try {
+    const { content } = await streamOllama([
+      { role: 'system', content: config.persona },
+      { role: 'user', content: note },
+    ], [], () => {});
+    return content.replace(/\[[a-z]+\]\s*/gi, '').trim() || message;
+  } catch {
+    return message;
+  }
+}
+
+const timerApi = {
+  add(ms, message) {
+    const t = setTimeout(async () => {
+      timers.delete(t);
+      const line = await timerLine(message);
+      win?.show();
+      win?.webContents.send('timer-fired', { message: line });
+      if (Notification.isSupported()) new Notification({ title: config.characterName, body: line, icon: APP_ICON }).show();
+    }, ms);
+    timers.add(t);
+  },
+  cancelAll() {
+    const n = timers.size;
+    for (const t of timers) clearTimeout(t);
+    timers.clear();
+    return n;
+  },
+};
+
+// ①判定役がツールを選んで実行し、結果を見てまた考える（エージェントループ）→ ②キャラとして結果を踏まえて返事
 async function runTools(messages) {
-  const ctx = await toolContext();
+  const ctx = { ...(await toolContext()), mediaControl, timers: timerApi };
   const tools = buildTools(config, config.lang, ctx.apps);
   if (!tools.length) return [];
-  const recent = messages.filter((m) => m.role !== 'system').slice(-4);
-  const { toolCalls } = await streamOllama([{ role: 'system', content: routerPrompt(config.lang) }, ...recent], tools, () => {});
-
-  const results = [];
-  const done = new Set();
-  for (const call of toolCalls) {
-    const { name, arguments: args } = call.function;
-    // 小さいモデルは同じ呼び出しを 2 回返すことがある（同じアプリが 2 回開くのを防ぐ）
-    const key = `${name}:${JSON.stringify(Object.entries(args || {}).sort())}`;
-    if (done.has(key)) continue;
-    done.add(key);
-    const result = await runTool(name, args, ctx);
-    console.log(`[tool] ${name}(${JSON.stringify(args)}) -> ${result}`);
-    results.push(result);
-  }
-  return results;
+  const history = messages.filter((m) => m.role !== 'system').slice(-4);
+  return runAgent({
+    chat: (msgs, t) => streamOllama(msgs, t, () => {}),
+    history,
+    tools,
+    ctx,
+    log: (step, name, args, result) => console.log(`[tool ${step + 1}] ${name}(${JSON.stringify(args)}) -> ${result}`),
+  });
 }
 
 ipcMain.handle('chat', async (event, { id, messages }) => {
