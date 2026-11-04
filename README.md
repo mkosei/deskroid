@@ -1,84 +1,88 @@
 # desktop_ai
 
-デスクトップに常駐する会話AIです。好きなキャラクター（Live2D または 3D）が画面の隅にいて、文字でも声でも話しかけられます。
-会話・音声認識・読み上げはすべてローカルで動くので、クラウドの API キーや利用料は要りません。
+English | [日本語](README.ja.md)
 
-![同梱キャラクター（左から ヴィータ・ヴィクトリア・サンプルA・千駄ヶ谷 篠）](docs/screenshot.png)
+A conversational AI that lives on your desktop. Your favorite character (Live2D or 3D) sits in the corner of the screen, and you can talk to it by text or by voice.
+Chat, speech recognition and text-to-speech all run locally, so there are no cloud API keys or usage fees.
 
-- 会話: [Ollama](https://ollama.com/)（既定は `qwen3:8b`）
-- 表示: Electron + Live2D（Cubism 3/4）／ 3D（glTF・GLB・VRM、three.js + [three-vrm](https://github.com/pixiv/three-vrm)）
-- 読み上げ: [VOICEVOX](https://voicevox.hiroshiba.jp/)
-- 音声認識: Whisper（[transformers.js](https://github.com/huggingface/transformers.js)、`whisper-large-v3-turbo`）
+> **Note:** The app's interface and conversations are in **Japanese**. The characters reply in Japanese, the menus are in Japanese, and speech recognition is set up for Japanese.
 
-## できること
+![Bundled characters (from left: Vita, Victoria, Sample A, Shino Sendagaya)](docs/screenshot.png)
 
-- 吹き出しでの会話（返事の気持ちに合わせて表情や動きが変わる）
-- 声での会話（マイク → 文字起こし → 返事を読み上げ、口パク）
-- 「YouTube 開いて」「GitHub で electron を検索して」などでサイトを開く
-- 「明日の天気は？」で天気予報を答える
-- 好きなモデルの読み込み（Live2D・3D）とキャラの切り替え
-- 3D モデルはボーンを自動で見つけて、視線・呼吸・手を振る・立ち姿・足の組み替えなどを付ける
-- VRM モデルは、まばたき・表情（笑顔・怒り・悲しみ・驚き）・口パク・視線・髪や服の揺れも動く
+- Chat: [Ollama](https://ollama.com/) (default model: `qwen3:8b`)
+- Rendering: Electron + Live2D (Cubism 3/4) / 3D (glTF, GLB, VRM via three.js + [three-vrm](https://github.com/pixiv/three-vrm))
+- Text-to-speech: [VOICEVOX](https://voicevox.hiroshiba.jp/)
+- Speech recognition: Whisper ([transformers.js](https://github.com/huggingface/transformers.js), `whisper-large-v3-turbo`)
 
-## 同梱キャラクター
+## Features
 
-最初から 4 人のキャラが入っていて、右クリック →「キャラ切り替え」で選べます。
+- Chat in speech bubbles (expressions and gestures change with the mood of each reply)
+- Voice conversation (microphone → transcription → spoken reply with lip sync)
+- Open sites by asking, e.g. "open YouTube" or "search GitHub for electron"
+- Ask for the weather forecast, e.g. "what's the weather tomorrow?"
+- Import your own models (Live2D / 3D) and switch between characters
+- 3D models: bones are detected automatically to add eye contact, breathing, waving, standing poses and leg crossing
+- VRM models also blink, change facial expressions (happy, angry, sad, surprised), lip-sync, follow the cursor with their eyes, and have hair/clothes physics
 
-| キャラ | 見た目 | 話し方 | 声（VOICEVOX） |
+## Bundled characters
+
+Four characters are included out of the box. Switch between them from the right-click menu → 「キャラ切り替え」 (Switch character).
+
+| Character | Look | Personality / speech | Voice (VOICEVOX) |
 |---|---|---|---|
-| ヴィータ（最初はこの子） | 青いメッシュの入った銀髪、オッドアイ | クールだけど面倒見がいい、気さくなタメ口 | 冥鳴ひまり |
-| ヴィクトリア | ふわっとした金髪、ピンクのドレス | おっとりしたお嬢様、やわらかい丁寧語 | 四国めたん（あまあま） |
-| サンプルA | 茶色のボブ、カーディガン | 落ち着いた聞き上手、やわらかいタメ口 | 春日部つむぎ |
-| 千駄ヶ谷 篠 | 黒髪ロング、制服 | しっかり者の生徒会長、落ち着いた丁寧語 | 九州そら |
+| Vita (ヴィータ, default) | Silver hair with blue streaks, heterochromia | Cool but caring, casual | Meimei Himari |
+| Victoria (ヴィクトリア) | Fluffy blond hair, pink dress | Easygoing young lady, soft polite speech | Shikoku Metan (sweet) |
+| Sample A (サンプルA) | Brown bob, cardigan | Calm, a good listener, casual | Kasukabe Tsumugi |
+| Shino Sendagaya (千駄ヶ谷 篠) | Long black hair, school uniform | Dependable student council president, calm polite speech | Kyushu Sora |
 
-モデルはどれも [VRoid プロジェクト](https://vroid.com/) のサンプルモデルで、VRoid Hub の利用条件（再配布・改変・商用利用 OK、クレジット不要）に従って同梱しています。
-アプリ本体の MIT ライセンスとは別の条件です。詳しくは [assets/avatars/LICENSE.md](assets/avatars/LICENSE.md) を見てください。
+All four are sample models from the [VRoid Project](https://vroid.com/), bundled under their VRoid Hub conditions of use (redistribution, modification and commercial use allowed; no credit required).
+They are licensed separately from the app's MIT license. See [assets/avatars/LICENSE.md](assets/avatars/LICENSE.md) for details.
 
-## 必要なもの
+## Requirements
 
-- Windows 10 / 11、または macOS（Apple シリコン・Intel）
-- [Ollama](https://ollama.com/) と会話用モデル（初回セットアップの画面から準備できます）
-- [VOICEVOX](https://voicevox.hiroshiba.jp/)（声で話させたいときだけ。一度起動しておけば、以降はアプリが裏でエンジンを起動します）
-- 会話用モデルを快適に動かすには、VRAM 8GB 以上の GPU、または Apple シリコンの Mac があると安心です
+- Windows 10 / 11, or macOS (Apple silicon or Intel)
+- [Ollama](https://ollama.com/) and a chat model (the first-run setup screen can set this up for you)
+- [VOICEVOX](https://voicevox.hiroshiba.jp/) (only if you want the characters to speak; launch it once, and after that the app starts its engine in the background)
+- A GPU with 8 GB+ VRAM, or an Apple silicon Mac, is recommended for running the chat model smoothly
 
-## インストール
+## Installation
 
-[Releases](https://github.com/mkosei/desktop_ai/releases) から、使っている OS のインストーラーをダウンロードします。
+Download the installer for your OS from [Releases](https://github.com/mkosei/desktop_ai/releases).
 
-| OS | ファイル |
+| OS | File |
 |---|---|
-| Windows | `DesktopAI-Setup-<バージョン>.exe` |
-| Mac（Apple シリコン：M1 以降） | `DesktopAI-<バージョン>-arm64.dmg` |
-| Mac（Intel） | `DesktopAI-<バージョン>-x64.dmg` |
+| Windows | `DesktopAI-Setup-<version>.exe` |
+| Mac (Apple silicon: M1 or later) | `DesktopAI-<version>-arm64.dmg` |
+| Mac (Intel) | `DesktopAI-<version>-x64.dmg` |
 
-- **Windows**：ダブルクリックしてインストールします。「Windows によって PC が保護されました」と出たら、「詳細情報」→「実行」を押してください（署名をしていないアプリのため）。
-  デスクトップとスタートメニューに「デスクトップAI」ができます
-- **Mac**：dmg を開いて、アプリを「アプリケーション」フォルダへドラッグします。
-  署名をしていないアプリなので、初回は Finder でアプリを右クリック →「開く」を選んでください。
-  それでも開けないときは、ターミナルで次を実行します
+- **Windows**: Double-click to install. If you see "Windows protected your PC", click "More info" → "Run anyway" (the app is not code-signed).
+  A 「デスクトップAI」 shortcut is added to the desktop and the Start menu
+- **Mac**: Open the dmg and drag the app into the Applications folder.
+  The app is not signed, so the first time, right-click it in Finder and choose "Open".
+  If it still won't open, run this in Terminal:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/DesktopAI.app
 ```
 
-### 初回セットアップ
+### First-run setup
 
-初めて起動すると「セットアップ」の画面が出て、必要なものがそろっているか確認します。足りないものはボタンから準備できます。
+On first launch, a setup screen checks that everything you need is in place. Anything missing can be set up with the buttons on that screen.
 
-| 項目 | 内容 |
+| Item | What it does |
 |---|---|
-| Ollama | 入っていなければダウンロードページを開きます。入っていて止まっていれば起動します |
-| 会話モデル | 入っていなければ、進み具合を見ながらダウンロードできます（`qwen3:8b` は約 5GB） |
-| VOICEVOX（任意） | 声で話させるときに使います。入っていなければダウンロードページを開きます |
-| マイク | Mac では、ここでマイクの使用を許可します |
-| 音声認識モデル（任意） | 声で話しかけるときに使います（約 1GB）。初めて声で話しかけたときにも自動で準備されます |
+| Ollama | Opens the download page if it isn't installed, or starts it if it's installed but not running |
+| Chat model | Downloads it with a progress bar if missing (`qwen3:8b` is about 5 GB) |
+| VOICEVOX (optional) | Used for speaking. Opens the download page if it isn't installed |
+| Microphone | On Mac, grant microphone access here |
+| Speech recognition model (optional) | Used when you talk by voice (about 1 GB). It is also prepared automatically the first time you speak |
 
-そろったら「はじめる」を押すとキャラが出てきます。あとから右クリック →「セットアップ」でいつでも開けます。
-Ollama につながらないときも、起動時に自動でこの画面が出ます。
+When everything is ready, press 「はじめる」 (Start) and the character appears. You can reopen this screen anytime from the right-click menu → 「セットアップ」 (Setup).
+It also opens automatically at startup if the app can't reach Ollama.
 
-## ソースから動かす（開発する人向け）
+## Running from source (for developers)
 
-[Node.js](https://nodejs.org/) LTS が必要です。
+Requires [Node.js](https://nodejs.org/) LTS.
 
 ```bash
 git clone https://github.com/mkosei/desktop_ai.git
@@ -93,10 +97,10 @@ npm install
 npm start
 ```
 
-Windows なら `start.bat` をダブルクリックしても起動できます。
+On Windows you can also double-click `start.bat`.
 
-`npm install` のあと `node_modules/electron/dist` に Electron 本体が無い場合は、npm がインストールスクリプトを止めています。
-npm の表示に従って Electron のスクリプトを許可し、入れ直してください。
+If the Electron binary is missing from `node_modules/electron/dist` after `npm install`, npm has blocked install scripts.
+Allow Electron's scripts as npm suggests, then rebuild:
 
 ```bash
 npm install-scripts approve electron
@@ -105,120 +109,120 @@ npm install-scripts approve electron
 npm rebuild electron
 ```
 
-### インストーラーを作る
+### Building the installer
 
 ```bash
 npm run dist
 ```
 
-`dist/` にインストーラーができます（Windows では `.exe`、Mac では `.dmg`）。Mac 用は Mac の上でしか作れません。
-`v0.2.0` のようなタグを push すると、GitHub Actions が Windows と Mac の両方のインストーラーを作って Releases に置きます。
+The installer is written to `dist/` (`.exe` on Windows, `.dmg` on Mac). The Mac build can only be made on a Mac.
+Pushing a tag such as `v0.2.0` makes GitHub Actions build installers for both Windows and Mac and attach them to a release.
 
-## 使い方
+## Usage
 
-| 操作 | 内容 |
+| Action | What it does |
 |---|---|
-| キャラを左クリック | 入力欄を出す／しまう（反応して動く） |
-| キャラをドラッグ | 好きな場所へ移動 |
-| キャラを右クリック | メニュー（下の表） |
-| `Ctrl+Space`（Mac は `Option+Space`） | 1 回だけ声を聞いて返事をする（聞いている途中にもう一度押すと取り消し） |
-| `Ctrl+Alt+V`（Mac は `Command+Option+V`）/ マイクボタン | 音声会話モードの ON/OFF（話し終わるたびに自動でまた聞く） |
+| Left-click the character | Show / hide the input box (the character reacts) |
+| Drag the character | Move it anywhere |
+| Right-click the character | Open the menu (see below) |
+| `Ctrl+Space` (Mac: `Option+Space`) | Listen once and reply (press again while listening to cancel) |
+| `Ctrl+Alt+V` (Mac: `Command+Option+V`) / mic button | Toggle voice conversation mode (keeps listening after each reply) |
 
-ホットキーは、右クリック →「ホットキー設定…」で好きなキーに変えられます（下を参照）。
+You can change the hotkeys from the right-click menu → 「ホットキー設定…」 (Hotkey settings, see below).
 
-右クリックメニュー：
+Right-click menu:
 
-| 項目 | 内容 |
+| Item | What it does |
 |---|---|
-| キャラ切り替え | 登録してあるキャラを切り替える |
-| 立ち姿 / 足 | 3D キャラのポーズ（手を後ろで組む・自然体・腰に手・足を組む・おまかせ） |
-| 音声会話 ON/OFF | `Ctrl+Alt+V` と同じ |
-| 会話をリセット | 会話の履歴を消す |
-| 常に最前面 | ほかのウィンドウより前に出しておくか |
-| モデルを読み込む… | 好きなモデルを追加する（下で説明） |
-| キャラ設定を開く | `config.local.json` を開く |
-| 配色設定… | 吹き出しや入力欄の色を変える。背景・文字・強調色・名札の色を選ぶと、キャラの画面にすぐ反映されます。「キャラの見た目から自動で作る」もできます |
-| ホットキー設定… | ホットキーを変える。「変更」を押してから使いたいキーを押すと登録され、保存するとすぐ使えます。「なしにする」で使わないこともできます |
-| 設定を再読み込み | 設定ファイルの変更を反映する |
+| 「キャラ切り替え」 Switch character | Switch to another registered character |
+| 「立ち姿」/「足」 Standing pose / Legs | Poses for 3D characters (hands behind back, relaxed, hands on hips, legs crossed, or auto) |
+| 「音声会話 ON/OFF」 Voice conversation on/off | Same as `Ctrl+Alt+V` |
+| 「会話をリセット」 Reset conversation | Clear the conversation history |
+| 「常に最前面」 Always on top | Keep the character above other windows |
+| 「モデルを読み込む…」 Import model | Add your own model (see below) |
+| 「キャラ設定を開く」 Open character settings | Open `config.local.json` |
+| 「配色設定…」 Color settings | Change the colors of the speech bubble and input box. Pick background, text, accent and name tag colors and see them applied right away. Can also generate colors automatically from the character's look |
+| 「ホットキー設定…」 Hotkey settings | Change the hotkeys. Click 「変更」 (Change), press the key combination you want, and save — it takes effect immediately. You can also disable a hotkey |
+| 「設定を再読み込み」 Reload settings | Apply changes made to the settings files |
 
-話しかけ方の例：
+Example requests (in Japanese):
 
-- 「YouTube 開いて」「ユーチューブで猫の動画探して」「X ひらいて」
-- 「今日の天気は？」「明日千葉って雨降る？」
+- 「YouTube 開いて」 (open YouTube), 「ユーチューブで猫の動画探して」 (find cat videos on YouTube), 「X ひらいて」 (open X)
+- 「今日の天気は？」 (what's the weather today?), 「明日千葉って雨降る？」 (will it rain in Chiba tomorrow?)
 
-## モデルを読み込む
+## Importing a model
 
-右クリック →「モデルを読み込む…」で、次のファイルを選びます。
+From the right-click menu → 「モデルを読み込む…」 (Import model), choose one of the following:
 
-| 種類 | 選ぶファイル | 備考 |
+| Type | File to choose | Notes |
 |---|---|---|
-| Live2D | `*.model3.json` | Cubism 3/4 形式。同じフォルダの中身ごとコピーされます |
-| 3D | `*.vrm` / `*.glb` | 1 ファイルのままコピーされます |
-| 3D | `*.gltf` | テクスチャなどを参照するので、フォルダごとコピーされます |
+| Live2D | `*.model3.json` | Cubism 3/4 format. The whole folder is copied |
+| 3D | `*.vrm` / `*.glb` | The single file is copied |
+| 3D | `*.gltf` | The whole folder is copied, since it references textures and other files |
 
-選んだモデルはデータフォルダ（下の「設定ファイル」を参照）の `models/<名前>/` にコピーされ、キャラとして追加されて、そのキャラに切り替わります。
+The model is copied to `models/<name>/` in the data folder (see "Settings files" below), added as a character, and selected.
 
-自動でやってくれること：
+What happens automatically:
 
-- **Live2D**：表情の名前（Smile・Angry・Sad など）とタップ用モーション（Tap など）を名前から探して、感情や反応に割り当てます
-- **3D**：首・頭・目・胸・腕・手・指・脚のボーンを名前から探します（VRM・Mixamo・3ds Max Biped・Unity・Blender などの名前に対応）。
-  ボーンが見つかれば、視線・呼吸・手を振る・うなずく・立ち姿・足を組むなどが動きます。
-  ボーンの無いモデルは、全体を揺らしたり跳ねさせたりする簡単な動きになります
-- **VRM**：規格で決まっているボーン・表情を使うので、名前を推測しなくても確実に動きます。
-  まばたき・表情・口パク・視線・髪や服の揺れも付きます。VRM 0.x の後ろ向きのモデルはこちらを向くように回します
+- **Live2D**: Expressions (Smile, Angry, Sad, …) and tap motions (Tap, …) are found by name and mapped to moods and reactions
+- **3D**: Neck, head, eye, chest, arm, hand, finger and leg bones are found by name (VRM, Mixamo, 3ds Max Biped, Unity and Blender naming are supported).
+  When bones are found, the character gets eye contact, breathing, waving, nodding, standing poses, leg crossing and more.
+  Models without bones get a simpler motion that sways or bounces the whole model
+- **VRM**: Uses the bones and expressions defined by the VRM standard, so everything works without guessing names.
+  Blinking, facial expressions, lip sync, eye tracking and hair/clothes physics are included. VRM 0.x models that face backwards are turned around
 
-### 読み込んだキャラを調整する
+### Tuning an imported character
 
-右クリック →「キャラ設定を開く」で `config.local.json` を開き、`characters` の中の項目を書き換えて「設定を再読み込み」します。
+Open `config.local.json` from the right-click menu → 「キャラ設定を開く」, edit the entries under `characters`, then choose 「設定を再読み込み」 (Reload settings).
 
-| 項目 | 内容 |
+| Key | Description |
 |---|---|
-| `characterName` | 名前（吹き出しに出る） |
-| `persona` | 性格・話し方（AI への指示文） |
-| `modelScale` | Live2D の大きさ |
-| `expressions` | 感情タグ（normal / smile / angry / sad / surprised / shy）→ 表情。Live2D は表情名、または `{ "パラメータID": 値 }` |
-| `tapMotions` | Live2D で頭・体をクリックしたときのモーショングループ |
-| `theme` | UI の配色（例：`{ "accent": "#c8435a", "panel": "rgba(28,27,45,0.92)" }`）。書かなければ、キャラの見た目から自動で作ります。ふだんは「配色設定…」から変えるのが簡単です |
-| `voice` | 声の設定（`{ "enabled": false }` で声なし、`speaker` で VOICEVOX の話者 ID） |
-| `model3d.fill` | 3D キャラが画面の高さのどれくらいを占めるか（0.8 = 8 割） |
-| `model3d.rotationY` | 3D キャラの向き（ラジアン。後ろを向いてしまうときは `3.14159`） |
-| `model3d.hideMeshes` | 消したい部品の名前（マテリアル名かメッシュ名の一部）。武器などを消すときに |
-| `model3d.motionScale` / `motionSpeed` | 動きの大きさ・速さ |
-| `model3d.fingerCurl` | 指の曲げ具合（0 でまっすぐ） |
+| `characterName` | Name (shown on the speech bubble) |
+| `persona` | Personality and speaking style (the instructions given to the AI) |
+| `modelScale` | Size of a Live2D model |
+| `expressions` | Mood tags (normal / smile / angry / sad / surprised / shy) → expressions. For Live2D, an expression name or `{ "ParameterID": value }` |
+| `tapMotions` | Live2D motion groups played when the head or body is clicked |
+| `theme` | UI colors (e.g. `{ "accent": "#c8435a", "panel": "rgba(28,27,45,0.92)" }`). If omitted, colors are generated from the character's look. The 「配色設定…」 screen is the easiest way to change them |
+| `voice` | Voice settings (`{ "enabled": false }` for no voice; `speaker` is the VOICEVOX speaker ID) |
+| `model3d.fill` | How much of the window height a 3D character fills (0.8 = 80%) |
+| `model3d.rotationY` | Facing direction of a 3D character in radians (use `3.14159` if it faces backwards) |
+| `model3d.hideMeshes` | Parts to hide (part of a material or mesh name), e.g. to remove a weapon |
+| `model3d.motionScale` / `motionSpeed` | Size and speed of the motions |
+| `model3d.fingerCurl` | How much the fingers curl (0 = straight) |
 
-## 設定ファイル
+## Settings files
 
-- `config.json`：共通の設定（会話モデル、ホットキー、開けるサイト、天気の地域、音声認識など）。アプリに同梱されています
-- `config.local.json`：この PC だけの設定（読み込んだキャラ、選択中のキャラ、セットアップ済みか）。`config.json` より優先されるので、
-  共通の設定を変えたいときも、同じ項目をここに書けば上書きできます
+- `config.json`: Shared settings (chat model, hotkeys, openable sites, weather locations, speech recognition, …). Bundled with the app
+- `config.local.json`: Settings for this PC only (imported characters, the selected character, whether setup is done). It takes priority over `config.json`,
+  so you can also override shared settings by writing the same keys here
 
-`config.local.json` と読み込んだモデル（`models/`）の置き場所（データフォルダ）：
+Where `config.local.json` and imported models (`models/`) are stored (the data folder):
 
-| 動かし方 | 場所 |
+| How you run the app | Location |
 |---|---|
-| インストーラーで入れた（Windows） | `%APPDATA%\desktop-mate` |
-| インストーラーで入れた（Mac） | `~/Library/Application Support/desktop-mate` |
-| ソースから動かしている | アプリのフォルダ |
+| Installed (Windows) | `%APPDATA%\desktop-mate` |
+| Installed (Mac) | `~/Library/Application Support/desktop-mate` |
+| From source | The app folder |
 
-右クリック →「キャラ設定を開く」で、`config.local.json` をすぐ開けます。
+You can open `config.local.json` directly from the right-click menu → 「キャラ設定を開く」.
 
-主な項目：
+Main keys:
 
-| 項目 | 内容 |
+| Key | Description |
 |---|---|
-| `ollamaModel` | 会話に使う Ollama のモデル（例：`qwen3:14b`） |
-| `hotkeys` | `listenOnce`（1 回だけ聞く）と `voiceChat`（音声会話 ON/OFF）のキー。`{ "win": "Control+Space", "mac": "Alt+Space" }` のように OS ごとにも書けます。ふだんは「ホットキー設定…」から変えるのが簡単です（`config.local.json` に保存されます） |
-| `apps` | 開けるサイト・アプリ。`open` に URL かパス、`search` に `{query}` 入りの検索 URL |
-| `weather.places` | 天気を調べる地域（地名と緯度・経度） |
-| `voice` | VOICEVOX の URL・話者 ID・話速など |
-| `stt` | 音声認識のモデル・デバイス・精度 |
+| `ollamaModel` | The Ollama model used for chat (e.g. `qwen3:14b`) |
+| `hotkeys` | Keys for `listenOnce` (listen once) and `voiceChat` (voice conversation on/off). Can be set per OS, e.g. `{ "win": "Control+Space", "mac": "Alt+Space" }`. The 「ホットキー設定…」 screen is the easiest way to change them (saved to `config.local.json`) |
+| `apps` | Sites and apps the character can open. `open` is a URL or path; `search` is a search URL containing `{query}` |
+| `weather.places` | Locations for weather lookups (name, latitude and longitude) |
+| `voice` | VOICEVOX URL, speaker ID, speaking speed, … |
+| `stt` | Speech recognition model, device and precision |
 
-## 注意
+## Notes
 
-- モデルは、それぞれの配布元のライセンス・利用規約に従って使ってください。配布や公開が禁止されているモデルも多いので、`models/` を公開リポジトリに含めないよう気をつけてください
-- VOICEVOX で作った音声を公開するときは、各キャラクターの規約に従ってクレジット（例：「VOICEVOX:ずんだもん」）を表記してください
+- Use models according to their distributors' licenses and terms of use. Many models may not be redistributed, so be careful not to include `models/` in a public repository
+- When publishing audio generated with VOICEVOX, credit it according to each character's terms (e.g. "VOICEVOX:ずんだもん")
 
-## ライセンス
+## License
 
-- アプリ本体のソースコード：[MIT](LICENSE)
-- 同梱キャラクターのモデル（`assets/avatars/`）：VRoid Hub の利用条件（[assets/avatars/LICENSE.md](assets/avatars/LICENSE.md)）
+- App source code: [MIT](LICENSE)
+- Bundled character models (`assets/avatars/`): VRoid Hub conditions of use ([assets/avatars/LICENSE.md](assets/avatars/LICENSE.md))
