@@ -88,11 +88,11 @@ async function checkAll(ctx) {
 }
 
 // 会話モデルのダウンロード（Ollama の /api/pull を流しながら進み具合を知らせる）
-async function pullModel(config, onProgress, model = config.ollamaModel) {
+async function pullModel(config, onProgress) {
   const res = await fetch(`${config.ollamaUrl}/api/pull`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, stream: true }),
+    body: JSON.stringify({ model: config.ollamaModel, stream: true }),
   });
   if (!res.ok) throw new Error(`Ollama ${res.status}: ${await res.text()}`);
   const decoder = new TextDecoder();
@@ -168,4 +168,4 @@ async function runAction(name, ctx, onProgress) {
   }
 }
 
-module.exports = { checkAll, runAction, ollamaReachable, pullModel };
+module.exports = { checkAll, runAction, ollamaReachable };

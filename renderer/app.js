@@ -165,9 +165,6 @@ const UI_STRINGS = {
     voiceTimeout: '声が聞こえなかったので、音声会話を終わりますね。',
     sttError: (msg) => `うまく聞き取れませんでした。\n(${msg})`,
     sttEmpty: 'ごめん、うまく聞き取れませんでした。もう一度お願いします。',
-    modelDownloading: (name, p) => `会話のモデル「${name}」をダウンロードしています… ${p ?? 0}%`,
-    modelDownloaded: (name) => `「${name}」に切り替えました。次の返事から使います。`,
-    modelDownloadFailed: (name, msg) => `「${name}」をダウンロードできませんでした。\n(${msg})`,
     sttLoadFailed: '音声認識の準備に失敗しちゃいました。もう一度話しかけてみて、だめならアプリを再起動してください（パソコンのメモリが足りないときに起きることがあります）。',
     sttLoadError: (msg) => `音声認識を準備できませんでした。\n(${msg})`,
     tagInstruction: (tags) => `返事の先頭には、そのときの気持ちに合うタグを必ず1つ付けてください。使えるタグ: ${tags}\n例: [smile] おはよう、今日も早いですね。`,
@@ -184,9 +181,6 @@ const UI_STRINGS = {
     voiceTimeout: "I didn't hear anything, so I'll end the voice conversation.",
     sttError: (msg) => `I couldn't make that out.\n(${msg})`,
     sttEmpty: "Sorry, I didn't catch that. Could you say it again?",
-    modelDownloading: (name, p) => `Downloading the chat model "${name}"… ${p ?? 0}%`,
-    modelDownloaded: (name) => `Switched to "${name}". I'll use it from the next reply.`,
-    modelDownloadFailed: (name, msg) => `Couldn't download "${name}".\n(${msg})`,
     sttLoadFailed: 'Speech recognition failed to load. Please try again, and if it still fails, restart the app (this can happen when the PC is low on memory).',
     sttLoadError: (msg) => `I couldn't prepare speech recognition.\n(${msg})`,
     tagInstruction: (tags) => `Always start your reply with exactly one tag that matches your mood. Available tags: ${tags}\nExample: [smile] Good morning, you're up early today.\nAlways reply in English.`,
@@ -739,20 +733,6 @@ window.mate.on('timer-fired', ({ message }) => {
   showBubble(`⏰ ${message}`, '');
   enqueueSpeech(message);
   hideBubbleLater(30000);
-});
-
-// 会話のモデルのダウンロードの進み具合
-window.mate.on('model-download', ({ name, percent, done, error }) => {
-  if (error) {
-    showBubble(ui().modelDownloadFailed(name, error), '');
-    hideBubbleLater(10000);
-  } else if (done) {
-    showBubble(ui().modelDownloaded(name), '');
-    hideBubbleLater(8000);
-  } else {
-    clearTimeout(bubbleTimer);
-    showBubble(ui().modelDownloading(name, percent), '');
-  }
 });
 
 window.mate.on('reset-chat', () => {

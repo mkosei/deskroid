@@ -9,9 +9,6 @@ const { mediaControl } = require('./pc-control');
 const { listApps, launchApp } = require('./pc-apps');
 const { MODEL_FILTERS, importModel, defaultPersona } = require('./model-import');
 const setup = require('./setup');
-// 会話のモデルの選択肢（Ollama に入っていなければ、選んだときにダウンロードする）
-const CHAT_PRESETS = ['qwen3:8b', 'qwen3:4b', 'qwen3:1.7b'];
-const CHAT_PRESET_SIZE = { 'qwen3:8b': '5.2GB', 'qwen3:4b': '2.5GB', 'qwen3:1.7b': '1.4GB' };
 const { strings } = require('./i18n');
 
 const IS_MAC = process.platform === 'darwin';
@@ -266,36 +263,8 @@ async function ollamaModels() {
   }
 }
 
-// 会話のモデルを切り替える（次の返事から使う）。入っていなければ、確かめてからダウンロードする
-let pulling = false;
-async function switchChatModel(name, installed) {
-  if (!installed) {
-    if (pulling) return;
-    const T = strings(config.lang);
-    const { response } = await dialog.showMessageBox(win, {
-      type: 'question',
-      buttons: [T.pullOk, T.cancel],
-      defaultId: 0,
-      cancelId: 1,
-      message: T.pullConfirm(name, CHAT_PRESET_SIZE[name] || '?'),
-    });
-    if (response !== 0) return;
-    pulling = true;
-    const send = (data) => { if (!win?.isDestroyed()) win.webContents.send('model-download', { name, ...data }); };
-    let last = -1;
-    try {
-      await setup.pullModel(config, (p) => {
-        const percent = p.total ? Math.floor((p.completed || 0) / p.total * 100) : null;
-        if (percent !== last) { last = percent; send({ percent }); }
-      }, name);
-      send({ done: true });
-    } catch (err) {
-      send({ error: err.message });
-      return;
-    } finally {
-      pulling = false;
-    }
-  }
+// 会話のモデルを切り替える（次の返事から使う）
+function switchChatModel(name) {
   writeLocalConfig({ ollamaModel: name });
   loadConfig();
 }
@@ -365,18 +334,14 @@ ipcMain.on('show-menu', async (event, extra) => {
       submenu: [
         {
           label: T.chatModel,
-          // おすすめ（入っていなくても出す）＋ ほかに入っているモデル
-          submenu: chatModels
-            ? [...new Set([...CHAT_PRESETS, ...chatModels])].map((name) => {
-              const installed = chatModels.includes(name);
-              const note = [T.chatPresets[name], installed ? '' : T.notInstalled].filter(Boolean).join('・');
-              return {
-                label: note ? `${name}（${note}）` : name,
-                type: 'radio',
-                checked: name === config.ollamaModel,
-                click: () => { if (name !== config.ollamaModel) switchChatModel(name, installed); },
-              };
-            })
+          // Ollama に入っているモデルだけ。qwen3 の大きさがわかるものには説明を付ける
+          submenu: chatModels?.length
+            ? chatModels.map((name) => ({
+              label: T.chatPresets[name] ? `${name}（${T.chatPresets[name]}）` : name,
+              type: 'radio',
+              checked: name === config.ollamaModel,
+              click: () => { if (name !== config.ollamaModel) switchChatModel(name); },
+            }))
             : [{ label: T.chatModelNone, enabled: false }],
         },
         {

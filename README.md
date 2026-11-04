@@ -166,7 +166,7 @@ Right-click menu:
 | Color settings… | Change the colors of the speech bubble and input box. Pick background, text, accent and name tag colors and see them applied right away. Can also generate colors automatically from the character's look |
 | Hotkey settings… | Change the hotkeys. Click "Change", press the key combination you want, and save — it takes effect immediately. You can also disable a hotkey |
 | Setup | Reopen the setup screen |
-| AI models | **Chat**: qwen3:8b (standard, about 5.2GB), qwen3:4b (light, about 2.5GB), qwen3:1.7b (very light, about 1.4GB) and any other models installed in Ollama. Models that aren't installed are downloaded after you confirm. Used from the next reply. **Speech recognition**: Accurate (about 1.9GB of memory) or Light (about 0.7GB, more mishearing). Choose Light if speech recognition fails to load because the PC is low on memory |
+| AI models | **Chat**: pick from the models installed in Ollama (used from the next reply). To use a lighter one, install it first, e.g. `ollama pull qwen3:4b` (about 2.5GB) or `ollama pull qwen3:1.7b` (about 1.4GB; weaker at choosing tools). **Speech recognition**: Accurate (about 1.9GB of memory) or Light (about 0.7GB, more mishearing). Choose Light if speech recognition fails to load because the PC is low on memory |
 | Language / 言語 | Auto (match the OS), 日本語 or English. The windows reload in the new language |
 | Reload settings | Apply changes made to the settings files |
 

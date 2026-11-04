@@ -15,7 +15,7 @@ contextBridge.exposeInMainWorld('mate', {
   on: (channel, fn) => {
     const allowed = [
       'chat-chunk', 'chat-done', 'chat-error', 'reset-chat', 'stt-status', 'toggle-voice-chat', 'listen-once',
-      'set-pose', 'set-legs', 'apply-theme', 'theme-auto-request', 'timer-fired', 'model-download',
+      'set-pose', 'set-legs', 'apply-theme', 'theme-auto-request', 'timer-fired',
     ];
     if (allowed.includes(channel)) ipcRenderer.on(channel, (_e, data) => fn(data));
   },
