@@ -171,9 +171,12 @@ function autoDetectFingers(hand) {
 }
 
 export async function createGltfCharacter(canvas, url, opts = {}) {
+  // 描く大きさは窓ではなくキャンバスの大きさ（吹き出しのために窓が上へ伸びても、キャラの大きさ・位置は変えない）
+  const stageW = canvas.clientWidth || window.innerWidth;
+  const stageH = canvas.clientHeight || window.innerHeight;
   const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setSize(window.innerWidth, window.innerHeight, false);
+  renderer.setSize(stageW, stageH, false);
   renderer.setClearColor(0x000000, 0);
 
   const scene = new THREE.Scene();
@@ -415,7 +418,7 @@ export async function createGltfCharacter(canvas, url, opts = {}) {
   console.log(`[3d] size=${size.toArray().map((v) => v.toFixed(2))} rig=${Object.keys(rig).join(',') || 'なし'}`);
 
   const fov = 30;
-  const camera = new THREE.PerspectiveCamera(fov, window.innerWidth / window.innerHeight, H * 0.01, H * 20);
+  const camera = new THREE.PerspectiveCamera(fov, stageW / stageH, H * 0.01, H * 20);
   const viewH = H / (opts.fill || 0.8);
   const dist = viewH / 2 / Math.tan(THREE.MathUtils.degToRad(fov / 2));
   camera.position.set(0, viewH / 2, dist);
@@ -752,7 +755,7 @@ export async function createGltfCharacter(canvas, url, opts = {}) {
   const tmp = new THREE.Vector3();
 
   function toNdc(x, y) {
-    ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
+    ndc.set((x / stageW) * 2 - 1, -(y / stageH) * 2 + 1);
     return ndc;
   }
 
@@ -763,13 +766,18 @@ export async function createGltfCharacter(canvas, url, opts = {}) {
       return raycaster.intersectObject(holder, true).length > 0;
     },
     setMouth: (v) => { mouth = opts.demoMouth ?? v; },
+    // キャラのいちばん上（頭のてっぺん）の、キャンバス上の y 座標。吹き出しを頭に重ねないために使う
+    topY: () => {
+      tmp.set(0, H, 0).project(camera);
+      return (1 - tmp.y) / 2 * stageH;
+    },
     lookAt: (x, y) => {
       if (!headAnchor) return;
       headAnchor.getWorldPosition(tmp).project(camera);
-      const hx = (tmp.x + 1) / 2 * window.innerWidth;
-      const hy = (1 - tmp.y) / 2 * window.innerHeight;
-      look.tYaw = clamp((x - hx) / window.innerWidth * 1.4, -0.5, 0.5);
-      look.tPitch = clamp((y - hy) / window.innerHeight * 0.9, -0.25, 0.3);
+      const hx = (tmp.x + 1) / 2 * stageW;
+      const hy = (1 - tmp.y) / 2 * stageH;
+      look.tYaw = clamp((x - hx) / stageW * 1.4, -0.5, 0.5);
+      look.tPitch = clamp((y - hy) / stageH * 0.9, -0.25, 0.3);
       // VRM の目は、マウスの先（顔より少し手前の面）を見る
       if (vrm?.lookAt) {
         raycaster.setFromCamera(toNdc(x, y), camera);

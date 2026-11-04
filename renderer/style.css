@@ -28,7 +28,14 @@ html, body {
   user-select: none;
 }
 
-#stage, #stage3d { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* キャラを描く場所は窓の下端にそろえて大きさを固定する（吹き出しのために窓が上へ伸びても、キャラは動かない） */
+#stage, #stage3d {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: var(--stage-w, 100%);
+  height: var(--stage-h, 100%);
+}
 
 .hidden { display: none !important; }
 
@@ -92,7 +99,8 @@ html, body {
 
 #bubble-you::before { content: "あなた："; opacity: 0.8; }
 
-/* 長い返事は本文だけをスクロールする（吹き出し全体をスクロールすると名札が隠れるため） */
+/* 長い返事は本文だけをスクロールする（吹き出し全体をスクロールすると名札が隠れるため）。
+   高さの上限は app.js の fitBubble が、キャラの頭に重ならないよう決める */
 #bubble-text {
   max-height: 140px;
   overflow-y: auto;

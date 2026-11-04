@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('mate', {
   getConfig: () => ipcRenderer.invoke('get-config'),
   setIgnoreMouse: (ignore) => ipcRenderer.send('set-ignore-mouse', ignore),
   moveWindow: (dx, dy) => ipcRenderer.send('move-window', { dx, dy }),
+  setTopExtra: (px) => ipcRenderer.invoke('set-top-extra', px),
   showMenu: (extra) => ipcRenderer.send('show-menu', extra),
   chat: (id, messages) => ipcRenderer.invoke('chat', { id, messages }),
   tts: (text) => ipcRenderer.invoke('tts', text),

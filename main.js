@@ -164,6 +164,11 @@ function createWindow() {
   win.setAlwaysOnTop(true, 'floating');
   // 透明部分のクリックはデスクトップへ通す（キャラ・UI上に来たら renderer 側で解除）
   win.setIgnoreMouseEvents(true, { forward: true });
+  // 読み込み直すときは、吹き出しのために上へ伸ばした窓を元の高さに戻す（画面側はこの高さをキャラの大きさの基準にする）
+  win.webContents.on('did-start-loading', () => {
+    const b = win.getBounds();
+    if (b.height !== WIN_H) win.setBounds({ x: b.x, y: b.y + b.height - WIN_H, width: b.width, height: WIN_H });
+  });
   win.webContents.on('console-message', (e) => {
     if (!e.message.includes('ScriptProcessorNode')) console.log(`[renderer ${e.level}] ${e.message}`);
   });
@@ -228,6 +233,18 @@ ipcMain.on('move-window', (_e, { dx, dy }) => {
   if (!win) return;
   const [x, y] = win.getPosition();
   win.setPosition(Math.round(x + dx), Math.round(y + dy));
+});
+
+// 吹き出しが長くてキャラの頭に重なるときは、窓を上にだけ伸ばす（下端とキャラの位置はそのまま）。
+// 画面の上端より上には伸ばさない。実際に伸ばせた量を返す
+ipcMain.handle('set-top-extra', (_e, extra) => {
+  if (!win) return 0;
+  const b = win.getBounds();
+  const bottom = b.y + b.height;
+  const { workArea } = screen.getDisplayMatching(b);
+  const height = Math.max(WIN_H, Math.min(WIN_H + Math.max(0, Math.round(extra)), bottom - workArea.y));
+  if (height !== b.height) win.setBounds({ x: b.x, y: bottom - height, width: b.width, height });
+  return height - WIN_H;
 });
 
 ipcMain.on('show-menu', (event, extra) => {

@@ -12,6 +12,15 @@ const micBtn = document.getElementById('mic');
 const levelBar = document.querySelector('#level i');
 
 let config;
+
+// キャラを描く場所（ステージ）は、起動したときの窓の大きさで固定し、窓の下端にそろえる。
+// 吹き出しが長いときは窓を上へ伸ばすが、キャラの大きさと位置は変わらない
+const STAGE_W = window.innerWidth;
+const STAGE_H = window.innerHeight;
+document.documentElement.style.setProperty('--stage-w', `${STAGE_W}px`);
+document.documentElement.style.setProperty('--stage-h', `${STAGE_H}px`);
+// 窓の座標 → ステージの座標（窓が上へ伸びた分だけずらす）
+const stageY = (y) => y - (window.innerHeight - STAGE_H);
 let character;            // { view, hitTest, setMouth, lookAt, setExpression?, tap? }
 let history = [];         // Ollama に送る会話履歴（system 以外）
 let generating = false;   // 返答ストリーミング中か
@@ -20,7 +29,10 @@ let bubbleTimer = null;
 
 const app = new PIXI.Application({
   view: canvas,
-  resizeTo: window,
+  width: STAGE_W,
+  height: STAGE_H,
+  autoDensity: true,
+  resolution: window.devicePixelRatio || 1,
   backgroundAlpha: 0,
   antialias: true,
 });
@@ -30,12 +42,12 @@ const app = new PIXI.Application({
 async function loadLive2D(url) {
   const model = await PIXI.live2d.Live2DModel.from(url, { autoInteract: false });
   const scale = Math.min(
-    (window.innerWidth * 0.95) / model.width,
-    (window.innerHeight * 0.8) / model.height,
+    (STAGE_W * 0.95) / model.width,
+    (STAGE_H * 0.8) / model.height,
   ) * (config.modelScale || 1);
   model.scale.set(scale);
   model.anchor.set(0.5, 1);
-  model.position.set(window.innerWidth / 2, window.innerHeight);
+  model.position.set(STAGE_W / 2, STAGE_H);
   app.stage.addChild(model);
 
   // 表情ファイルの無いモデル向け：パラメータを直接動かして表情を作る
@@ -54,6 +66,7 @@ async function loadLive2D(url) {
   return {
     view: model,
     hitTest: (x, y) => model.getBounds().contains(x, y),
+    topY: () => model.getBounds().y,
     setMouth: (v) => { mouth = v; },
     lookAt: (x, y) => model.focus(x, y),
     // 文字列なら exp3.json の表情名、オブジェクトなら { パラメータID: 値 }
@@ -101,7 +114,7 @@ function createPlaceholder() {
   body.beginFill(0x2a2650).lineStyle(4, 0xd2b46c).drawEllipse(0, 0, R * 1.1, R).endFill();
   face.addChild(eyes, mouthG);
   root.addChild(body, face);
-  root.position.set(window.innerWidth / 2, window.innerHeight - R - 70);
+  root.position.set(STAGE_W / 2, STAGE_H - R - 70);
   app.stage.addChild(root);
 
   let mouth = 0;
@@ -114,7 +127,7 @@ function createPlaceholder() {
     const now = performance.now();
     if (now > nextBlink) { blink = 0; nextBlink = now + 2500 + Math.random() * 3000; }
     blink = Math.min(1, blink + 0.12);
-    root.y = window.innerHeight - R - 70 + Math.sin((now - t0) / 600) * 4;
+    root.y = STAGE_H - R - 70 + Math.sin((now - t0) / 600) * 4;
     face.position.set(look.x * 14, look.y * 8);
 
     eyes.clear().beginFill(0xf3f1f8);
@@ -130,6 +143,7 @@ function createPlaceholder() {
   return {
     view: root,
     hitTest: (x, y) => root.getBounds().contains(x, y),
+    topY: () => root.getBounds().y,
     setMouth: (v) => { mouth = v; },
     lookAt: (x, y) => {
       const b = root.getBounds();
@@ -468,7 +482,7 @@ function setInteractive(on) {
 }
 
 window.addEventListener('mousemove', (e) => {
-  character?.lookAt(e.clientX, e.clientY);
+  character?.lookAt(e.clientX, stageY(e.clientY));
 
   if (drag) {
     const dx = e.screenX - drag.lastX;
@@ -481,15 +495,15 @@ window.addEventListener('mousemove', (e) => {
   }
 
   const overUi = !!e.target.closest?.('.ui');
-  const overChar = character?.hitTest(e.clientX, e.clientY);
+  const overChar = character?.hitTest(e.clientX, stageY(e.clientY));
   setInteractive(overUi || overChar);
 });
 
 window.addEventListener('mousedown', (e) => {
   audioCtx.resume();
   if (e.button !== 0 || e.target.closest('.ui')) return;
-  if (!character?.hitTest(e.clientX, e.clientY)) return;
-  drag = { lastX: e.screenX, lastY: e.screenY, x: e.clientX, y: e.clientY, moved: 0 };
+  if (!character?.hitTest(e.clientX, stageY(e.clientY))) return;
+  drag = { lastX: e.screenX, lastY: e.screenY, x: e.clientX, y: stageY(e.clientY), moved: 0 };
 });
 
 window.addEventListener('mouseup', () => {
@@ -536,12 +550,48 @@ function showBubble(text, you) {
   }
   bubbleText.textContent = text;
   bubble.classList.remove('hidden');
+  fitBubble();
   bubbleText.scrollTop = bubbleText.scrollHeight;
 }
 
 function hideBubbleLater(ms = 15000) {
   clearTimeout(bubbleTimer);
-  bubbleTimer = setTimeout(() => bubble.classList.add('hidden'), ms);
+  bubbleTimer = setTimeout(hideBubble, ms);
+}
+
+function hideBubble() {
+  bubble.classList.add('hidden');
+  fitBubble();
+}
+
+// ---------- 吹き出しをキャラの頭に重ねない ----------
+// 吹き出しの下（しっぽの先）が頭のてっぺんより上に来るよう、足りない分だけ窓を上へ伸ばす。
+// 画面の上端まで伸ばしても足りないときは、本文の高さを縮めてスクロールさせる。
+// 返事を受け取っている間は伸ばすだけにして（縮めるとガタつく）、吹き出しを隠したら元の高さに戻す
+const BUBBLE_TEXT_MAX = 300; // 本文の高さの上限（これより長いときはスクロール）
+const BUBBLE_GAP = 14;       // しっぽの分の、頭とのすき間
+let topExtra = 0;            // 今、窓を上へ伸ばしている量
+let fitQueued = false;
+
+function fitBubble() {
+  if (fitQueued) return;
+  fitQueued = true;
+  requestAnimationFrame(async () => {
+    fitQueued = false;
+    if (bubble.classList.contains('hidden')) {
+      bubbleText.style.maxHeight = '';
+      if (topExtra) topExtra = await window.mate.setTopExtra(0);
+      return;
+    }
+    const headTop = Math.max(0, character?.topY?.() ?? STAGE_H * 0.2);
+    // 本文の上限を最大に戻してから、吹き出しの本当の高さを測る
+    bubbleText.style.maxHeight = `${BUBBLE_TEXT_MAX}px`;
+    const need = bubble.offsetTop + bubble.offsetHeight + BUBBLE_GAP - headTop;
+    if (need > topExtra) topExtra = await window.mate.setTopExtra(need);
+    // 伸ばしきれなかった分は、本文を縮めてスクロールで読ませる
+    const over = need - topExtra;
+    if (over > 0) bubbleText.style.maxHeight = `${Math.max(60, BUBBLE_TEXT_MAX - over)}px`;
+  });
 }
 
 input.addEventListener('keydown', (e) => {
