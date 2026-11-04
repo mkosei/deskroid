@@ -779,6 +779,16 @@ export async function createGltfCharacter(canvas, url, opts = {}) {
         lookTarget.position.copy(origin).addScaledVector(direction, k);
       }
     },
+    // 配色の自動作成用に、キャラを描いた小さな画像を返す（描いた直後に読むので透明部分もそのまま）
+    snapshot: (w = 80, h = 124) => {
+      renderer.render(scene, camera);
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(renderer.domElement, 0, 0, w, h);
+      return ctx.getImageData(0, 0, w, h);
+    },
     // name は体の動き（config の expressions の値）、tag は感情タグ（VRM の表情に使う）
     setExpression: (name, tag) => {
       if (em && tag) faceTarget = Object.fromEntries(VRM_FACES[tag] || []);

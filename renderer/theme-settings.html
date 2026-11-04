@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>配色設定</title>
+  <style>
+    :root {
+      --bg: #f6f6f9;
+      --card: #ffffff;
+      --text: #22212b;
+      --sub: #6b6a78;
+      --line: #e3e2ea;
+      --primary: #5b6ee1;
+      --primary-text: #ffffff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #17161d;
+        --card: #211f29;
+        --text: #eceaf3;
+        --sub: #a19fae;
+        --line: #33313d;
+        --primary: #8496f0;
+        --primary-text: #15141b;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 20px 20px 80px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Yu Gothic UI", "Hiragino Sans", "Meiryo", sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    h1 { margin: 0 0 2px; font-size: 18px; }
+    .lead { margin: 0 0 14px; color: var(--sub); font-size: 13px; }
+
+    /* プレビュー：キャラ画面の吹き出し・入力欄と同じ作り（変数はプレビューの中だけに付ける） */
+    .preview {
+      position: relative;
+      padding: 18px 14px 14px;
+      margin-bottom: 14px;
+      border-radius: 12px;
+      background: repeating-conic-gradient(#8881 0 25%, #8882 0 50%) 0 0 / 16px 16px;
+      border: 1px solid var(--line);
+    }
+    .p-bubble {
+      position: relative;
+      padding: 18px 14px 10px;
+      background: var(--panel);
+      color: var(--panel-text);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: 0 6px 18px var(--shadow);
+      font-size: 13px;
+    }
+    .p-name {
+      position: absolute;
+      top: -1px;
+      left: 12px;
+      padding: 0 10px 2px;
+      background: var(--name-bg);
+      color: var(--name-text);
+      border-radius: 0 0 8px 8px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .p-you { color: var(--sub-text); font-size: 12px; border-bottom: 1px dashed var(--border); margin-bottom: 4px; }
+    .p-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 12px;
+      padding: 5px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+    }
+    .p-bar span { flex: 1; color: var(--sub-text); font-size: 13px; padding-left: 4px; }
+    .p-mic, .p-send { width: 28px; height: 28px; border-radius: 50%; }
+    .p-mic { background: var(--soft); }
+    .p-send { background: var(--accent); }
+
+    .field {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 12px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-bottom: none;
+    }
+    .field:first-of-type { border-radius: 10px 10px 0 0; }
+    .field:last-of-type { border-bottom: 1px solid var(--line); border-radius: 0 0 10px 10px; }
+    .field small { display: block; color: var(--sub); font-size: 12px; }
+    .field .ctrl { display: flex; align-items: center; gap: 8px; }
+    input[type="color"] { width: 44px; height: 30px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; cursor: pointer; }
+    input[type="range"] { width: 110px; }
+    .pct { width: 36px; color: var(--sub); font-size: 12px; text-align: right; }
+
+    .tools { display: flex; gap: 8px; margin-top: 12px; }
+    button {
+      padding: 6px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--card);
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    button.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
+    button:disabled { opacity: 0.5; cursor: default; }
+    #status { min-height: 18px; margin-top: 8px; color: var(--sub); font-size: 12px; }
+    footer {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      gap: 8px;
+      padding: 12px 20px;
+      background: var(--bg);
+      border-top: 1px solid var(--line);
+    }
+    footer .spacer { flex: 1; }
+  </style>
+</head>
+<body>
+  <h1>配色設定</h1>
+  <p class="lead" id="lead">色を変えると、キャラの吹き出しや入力欄にすぐ反映されます。</p>
+
+  <div class="preview" id="preview">
+    <div class="p-bubble">
+      <div class="p-name" id="p-name">キャラ</div>
+      <div class="p-you">あなた：こんにちは</div>
+      やっほー、今日もいい天気だね。
+    </div>
+    <div class="p-bar"><div class="p-mic"></div><span>話しかける…</span><div class="p-send"></div></div>
+  </div>
+
+  <div id="fields">
+    <label class="field">
+      <div>背景<small>吹き出しと入力欄の地の色</small></div>
+      <div class="ctrl">
+        <input type="range" id="panelAlpha" min="0.5" max="1" step="0.01"><span class="pct" id="alphaPct"></span>
+        <input type="color" id="panel">
+      </div>
+    </label>
+    <label class="field">
+      <div>文字<small>吹き出しの文字</small></div>
+      <div class="ctrl"><input type="color" id="text"></div>
+    </label>
+    <label class="field">
+      <div>強調色<small>送信ボタン・枠線・「話しています」の点</small></div>
+      <div class="ctrl"><input type="color" id="accent"></div>
+    </label>
+    <label class="field">
+      <div>名札<small>吹き出しの左上の名前</small></div>
+      <div class="ctrl"><input type="color" id="nameBg"></div>
+    </label>
+    <label class="field">
+      <div>名札の文字</div>
+      <div class="ctrl"><input type="color" id="nameText"></div>
+    </label>
+  </div>
+
+  <div class="tools">
+    <button id="auto">キャラの見た目から自動で作る</button>
+    <button id="reset">元の配色に戻す</button>
+  </div>
+  <div id="status"></div>
+
+  <footer>
+    <span class="spacer"></span>
+    <button id="close">閉じる</button>
+    <button id="save" class="primary">保存</button>
+  </footer>
+
+  <script src="theme.js"></script>
+  <script src="theme-settings.js"></script>
+</body>
+</html>

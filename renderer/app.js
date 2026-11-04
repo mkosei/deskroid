@@ -69,6 +69,16 @@ async function loadLive2D(url) {
         exprTarget = 0;
       }
     },
+    // 配色の自動作成用に、キャラだけを描いた小さな画像を返す
+    snapshot: (w = 80, h = 124) => {
+      const src = app.renderer.extract.canvas(model);
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(src, 0, 0, w, h);
+      return ctx.getImageData(0, 0, w, h);
+    },
     // 上の方を触ったら頭、それ以外は体のモーション（FORCE 優先度）
     tap: (x, y) => {
       const b = model.getBounds();
@@ -605,14 +615,50 @@ window.mate.on('reset-chat', () => {
   hideBubbleLater(4000);
 });
 
+// ---------- 配色 ----------
+
+let appliedThemeKeys = [];
+
+// CSS 変数を差し替える（前に付けた変数は外して、style.css の既定に戻してから付ける）
+function applyTheme(theme = {}) {
+  const root = document.documentElement.style;
+  for (const k of appliedThemeKeys) root.removeProperty(`--${k}`);
+  appliedThemeKeys = Object.keys(theme);
+  for (const [k, v] of Object.entries(theme)) root.setProperty(`--${k}`, v);
+}
+
+// キャラを描いた画像から配色を作る（描けないキャラなら null）
+async function autoThemeFromCharacter() {
+  if (!character?.snapshot) return null;
+  // テクスチャが読み込まれて 1〜2 回描かれるのを待ってから、まばたきなどでぶれないよう少しずつ間をあけて 4 枚撮る
+  const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  try {
+    const shots = [];
+    for (let i = 0; i < 4; i++) {
+      await frame();
+      shots.push(character.snapshot());
+      await new Promise((r) => setTimeout(r, 120));
+    }
+    return window.ThemeUtil.autoTheme(shots)?.theme || null;
+  } catch (err) {
+    console.warn('[theme] 自動の配色を作れませんでした', err);
+    return null;
+  }
+}
+
+// 配色設定画面からの操作
+window.mate.on('apply-theme', (theme) => applyTheme(theme));
+window.mate.on('theme-auto-request', async () => {
+  window.mate.themeAutoResult(await autoThemeFromCharacter());
+});
+
 // ---------- 起動 ----------
 
 (async () => {
   config = await window.mate.getConfig();
   bubbleName.textContent = config.characterName;
-  for (const [k, v] of Object.entries(config.theme || {})) {
-    document.documentElement.style.setProperty(`--${k}`, v);
-  }
+  const hasTheme = Object.keys(config.theme || {}).length > 0;
+  if (hasTheme) applyTheme(config.theme);
   if (config.stt?.enabled) window.mate.sttWarmup();
   else micBtn.classList.add('hidden');
 
@@ -643,6 +689,14 @@ window.mate.on('reset-chat', () => {
     showBubble(`Live2Dモデルを読み込めなかったので仮の姿でいます。\n(${err.message})`, '');
     hideBubbleLater(10000);
     return;
+  }
+  // 配色が決まっていないキャラ（読み込んだモデルなど）は、見た目から配色を作る
+  if (!hasTheme) {
+    const auto = await autoThemeFromCharacter();
+    if (auto) applyTheme(auto);
+    window.mate.themeApplied(auto || {}, true);
+  } else {
+    window.mate.themeApplied(config.theme);
   }
   showBubble(`${config.characterName}です。クリックで話しかけてください。マイクボタンで声でも話せますよ。`, '');
   hideBubbleLater(8000);

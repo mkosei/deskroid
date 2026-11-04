@@ -66,6 +66,9 @@ function loadConfig() {
     voice: { ...base.voice, ...chara.voice },
     stt: { ...base.stt, ...chara.stt },
   };
+  // 配色：配色設定画面で保存したもの（config.local.json の themes）があればそれを使う
+  config.defaultTheme = chara.theme || {};
+  config.theme = local.themes?.[id] || config.defaultTheme;
   config.characterName ||= 'マスコット';
   config.persona ||= defaultPersona(config.characterName, !!config.voice.enabled);
   config.hotkeys = Object.fromEntries(
@@ -202,6 +205,7 @@ ipcMain.on('show-menu', (event, extra) => {
     { type: 'separator' },
     { label: 'モデルを読み込む…', click: () => importModelFromDialog() },
     { label: 'キャラ設定を開く', click: () => openLocalConfig() },
+    { label: '配色設定…', click: () => openThemeWindow() },
     { label: 'ホットキー設定…', click: () => openHotkeyWindow() },
     { label: 'セットアップ（Ollama・声・マイクの確認）', click: () => openSetupWindow() },
     { label: '設定を再読み込み', click: () => win.reload() },
@@ -405,6 +409,90 @@ ipcMain.handle('stt-warmup', () => {
   if (config.stt?.enabled) loadAsr().catch(() => {});
 });
 
+// ---------- 配色 ----------
+
+let appliedTheme = {}; // キャラ画面に今付いている（保存済みの）配色。自動で作ったものも含む
+let themeWin = null;
+
+// キャラ画面に付いた配色を覚える。自動で作った配色は保存しておき、次からも同じ色にする
+ipcMain.on('theme:applied', (_e, theme, auto) => {
+  appliedTheme = theme || {};
+  if (!auto || !Object.keys(appliedTheme).length) return;
+  const local = readLocalConfig();
+  if (local.themes?.[config.characterId]) return;
+  writeLocalConfig({ themes: { ...local.themes, [config.characterId]: appliedTheme } });
+});
+
+const applyThemeToCharacter = (theme) => win?.webContents.send('apply-theme', theme);
+
+// キャラ画面に、キャラの見た目から配色を作ってもらう
+function requestAutoTheme() {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), 5000);
+    ipcMain.once('theme:auto-result', (_e, theme) => {
+      clearTimeout(timer);
+      resolve(theme);
+    });
+    win?.webContents.send('theme-auto-request');
+  });
+}
+
+function openThemeWindow() {
+  if (themeWin) {
+    themeWin.focus();
+    return;
+  }
+  themeWin = new BrowserWindow({
+    width: 460,
+    height: 800,
+    title: '配色設定',
+    resizable: false,
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'theme-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  themeWin.loadFile(path.join(__dirname, 'renderer', 'theme-settings.html'));
+  themeWin.on('closed', () => {
+    themeWin = null;
+    applyThemeToCharacter(appliedTheme); // 保存せずに閉じたら、試していた配色を元に戻す
+  });
+}
+
+ipcMain.handle('theme:get', () => ({
+  characterName: config.characterName,
+  theme: appliedTheme,
+  hasDefault: Object.keys(config.defaultTheme || {}).length > 0,
+  saved: !!readLocalConfig().themes?.[config.characterId],
+}));
+
+ipcMain.handle('theme:preview', (_e, theme) => applyThemeToCharacter(theme));
+ipcMain.handle('theme:auto', () => requestAutoTheme());
+
+ipcMain.handle('theme:save', (_e, theme) => {
+  const local = readLocalConfig();
+  writeLocalConfig({ themes: { ...local.themes, [config.characterId]: theme } });
+  config.theme = theme;
+  appliedTheme = theme;
+  applyThemeToCharacter(theme);
+});
+
+// 保存した配色を消して、キャラの元の配色（無ければ自動の配色）に戻す
+ipcMain.handle('theme:reset', async () => {
+  const local = readLocalConfig();
+  const themes = { ...local.themes };
+  delete themes[config.characterId];
+  writeLocalConfig({ themes });
+  const hasDefault = Object.keys(config.defaultTheme || {}).length > 0;
+  const theme = hasDefault ? config.defaultTheme : (await requestAutoTheme()) || {};
+  config.theme = config.defaultTheme;
+  appliedTheme = theme;
+  applyThemeToCharacter(theme);
+  return theme;
+});
+
 // ---------- ホットキー ----------
 
 const HOTKEY_ACTIONS = { listenOnce: 'listen-once', voiceChat: 'toggle-voice-chat' };
@@ -555,8 +643,9 @@ app.whenReady().then(async () => {
   for (const name of registerHotkeys(config.hotkeys)) {
     console.warn(`ホットキーを登録できませんでした（他のアプリが使用中かも）: ${name}=${config.hotkeys[name]}`);
   }
-  // 開発用：`electron . --hotkeys` で起動時にホットキー設定を開く
+  // 開発用：`electron . --hotkeys` / `--theme` で起動時に設定画面を開く
   if (process.argv.includes('--hotkeys')) openHotkeyWindow();
+  if (process.argv.includes('--theme')) setTimeout(openThemeWindow, 3000);
 });
 
 // Mac ではウィンドウを全部閉じてもアプリを終わらせないのが普通だが、
