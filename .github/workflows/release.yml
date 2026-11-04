@@ -11,9 +11,22 @@ permissions:
   contents: write
 
 jobs:
+  # 先にリリースを 1 つだけ作っておく。Windows と Mac のビルドがそれぞれ作ると、同じタグのリリースが 2 つできてしまう
+  create-release:
+    if: github.repository == 'mkosei/deskroid' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh release view "$TAG" --repo "$REPO" > /dev/null 2>&1 || gh release create "$TAG" --repo "$REPO" --title "${TAG#v}" --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+
   build:
-    # 公開版のリポジトリでだけ動かす（非公開版から誤って配布しないように）
-    if: github.repository == 'mkosei/deskroid'
+    needs: create-release
+    # 公開版のリポジトリでだけ動かす（非公開版から誤って配布しないように）。
+    # 手動実行のときは create-release が飛ばされるので、失敗・取り消しでなければ動かす
+    if: github.repository == 'mkosei/deskroid' && !failure() && !cancelled()
     strategy:
       fail-fast: false
       matrix:
