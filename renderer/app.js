@@ -494,7 +494,7 @@ function showBubble(text, you) {
   }
   bubbleText.textContent = text;
   bubble.classList.remove('hidden');
-  bubble.scrollTop = bubble.scrollHeight;
+  bubbleText.scrollTop = bubbleText.scrollHeight;
 }
 
 function hideBubbleLater(ms = 15000) {

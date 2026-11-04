@@ -3,6 +3,8 @@
 デスクトップに常駐する会話AIです。好きなキャラクター（Live2D または 3D）が画面の隅にいて、文字でも声でも話しかけられます。
 会話・音声認識・読み上げはすべてローカルで動くので、クラウドの API キーや利用料は要りません。
 
+![同梱キャラクター（左から ヴィータ・ヴィクトリア・サンプルA・千駄ヶ谷 篠）](docs/screenshot.png)
+
 - 会話: [Ollama](https://ollama.com/)（既定は `qwen3:8b`）
 - 表示: Electron + Live2D（Cubism 3/4）／ 3D（glTF・GLB・VRM、three.js + [three-vrm](https://github.com/pixiv/three-vrm)）
 - 読み上げ: [VOICEVOX](https://voicevox.hiroshiba.jp/)

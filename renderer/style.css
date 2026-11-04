@@ -40,8 +40,6 @@ html, body {
   left: 14px;
   right: 14px;
   z-index: 2;
-  max-height: 190px;
-  overflow-y: auto;
   padding: 20px 16px 12px;
   background: var(--panel);
   color: var(--panel-text);
@@ -53,10 +51,9 @@ html, body {
   line-height: 1.75;
   user-select: text;
   animation: pop 0.18s ease-out;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
 }
 
+/* 吹き出しのしっぽ。回した四角の下半分だけを見せる（上半分が吹き出しに重なって色が濃くならないように） */
 #bubble::after {
   content: "";
   position: absolute;
@@ -69,6 +66,7 @@ html, body {
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   transform: rotate(45deg);
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
 }
 
 #bubble-name {
@@ -94,7 +92,14 @@ html, body {
 
 #bubble-you::before { content: "あなた："; opacity: 0.8; }
 
-#bubble-text { white-space: pre-wrap; }
+/* 長い返事は本文だけをスクロールする（吹き出し全体をスクロールすると名札が隠れるため） */
+#bubble-text {
+  max-height: 140px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
 
 @keyframes pop {
   from { opacity: 0; transform: translateY(4px) scale(0.98); }
