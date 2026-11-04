@@ -351,8 +351,13 @@ async function runTools(messages) {
   const { toolCalls } = await streamOllama([{ role: 'system', content: routerPrompt(config.lang) }, ...recent], tools, () => {});
 
   const results = [];
+  const done = new Set();
   for (const call of toolCalls) {
     const { name, arguments: args } = call.function;
+    // 小さいモデルは同じ呼び出しを 2 回返すことがある（同じアプリが 2 回開くのを防ぐ）
+    const key = `${name}:${JSON.stringify(Object.entries(args || {}).sort())}`;
+    if (done.has(key)) continue;
+    done.add(key);
     const result = await runTool(name, args, ctx);
     console.log(`[tool] ${name}(${JSON.stringify(args)}) -> ${result}`);
     results.push(result);
@@ -500,7 +505,9 @@ function loadAsr() {
     try {
       return await pipeline('automatic-speech-recognition', config.stt.model, { ...opts, device: config.stt.device });
     } catch (err) {
-      console.warn(`STT: ${config.stt.device} で読み込めなかったので CPU で動かします`, err.message);
+      console.warn(`STT: ${config.stt.device} で読み込めなかったので、少し待って CPU でもう一度読み込みます`, err.message);
+      // メモリが一時的に足りないときなどに "Protobuf parsing failed" で失敗することがあるので、間をおいてやり直す
+      await new Promise((r) => setTimeout(r, 3000));
       return pipeline('automatic-speech-recognition', config.stt.model, { ...opts, device: 'cpu' });
     }
   })();

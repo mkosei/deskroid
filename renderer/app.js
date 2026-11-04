@@ -151,6 +151,7 @@ const UI_STRINGS = {
     voiceTimeout: '声が聞こえなかったので、音声会話を終わりますね。',
     sttError: (msg) => `うまく聞き取れませんでした。\n(${msg})`,
     sttEmpty: 'ごめん、うまく聞き取れませんでした。もう一度お願いします。',
+    sttLoadFailed: '音声認識の準備に失敗しちゃいました。もう一度話しかけてみて、だめならアプリを再起動してください（パソコンのメモリが足りないときに起きることがあります）。',
     sttLoadError: (msg) => `音声認識を準備できませんでした。\n(${msg})`,
     tagInstruction: (tags) => `返事の先頭には、そのときの気持ちに合うタグを必ず1つ付けてください。使えるタグ: ${tags}\n例: [smile] おはよう、今日も早いですね。`,
     reset: '会話をリセットしました。',
@@ -166,6 +167,7 @@ const UI_STRINGS = {
     voiceTimeout: "I didn't hear anything, so I'll end the voice conversation.",
     sttError: (msg) => `I couldn't make that out.\n(${msg})`,
     sttEmpty: "Sorry, I didn't catch that. Could you say it again?",
+    sttLoadFailed: 'Speech recognition failed to load. Please try again, and if it still fails, restart the app (this can happen when the PC is low on memory).',
     sttLoadError: (msg) => `I couldn't prepare speech recognition.\n(${msg})`,
     tagInstruction: (tags) => `Always start your reply with exactly one tag that matches your mood. Available tags: ${tags}\nExample: [smile] Good morning, you're up early today.\nAlways reply in English.`,
     reset: 'The conversation has been reset.',
@@ -423,7 +425,8 @@ async function finishUtterance(chunks) {
     text = await window.mate.stt(samples);
   } catch (err) {
     console.error('[stt]', err);
-    showBubble(ui().sttError(err.message));
+    // モデルの読み込み失敗は、生のエラーではなく「どうすればいいか」を伝える
+    showBubble(/Load model|Protobuf/i.test(err.message) ? ui().sttLoadFailed : ui().sttError(err.message));
   }
   console.log(`[stt] ${(samples.length / 16000).toFixed(1)}s -> "${text}" (${Math.round(performance.now() - t0)}ms)`);
   const wasOneShot = oneShot;
