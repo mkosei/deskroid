@@ -385,7 +385,12 @@ const timerApi = {
     const t = setTimeout(async () => {
       timers.delete(t);
       const line = await timerLine(message);
-      win?.show();
+      // 隠れていたときだけ出す。show() は「常に最前面」を外してしまうことがあるので、出したあとに付け直す
+      if (win) {
+        const onTop = win.isAlwaysOnTop();
+        if (!win.isVisible()) win.showInactive();
+        if (onTop) win.setAlwaysOnTop(true, 'floating');
+      }
       win?.webContents.send('timer-fired', { message: line });
       if (Notification.isSupported()) new Notification({ title: config.characterName, body: line, icon: APP_ICON }).show();
     }, ms);
