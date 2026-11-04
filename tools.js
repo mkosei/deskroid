@@ -11,47 +11,81 @@ const { resolveYouTube, resolvePrimeVideo } = require('./content-resolve');
 const ROUTER_PROMPTS = {
   ja: [
     'あなたはユーザーの依頼を判定して、ツールで実行する係です。ユーザーの最後の発言を見て、必要なツールを呼び出してください。',
+    '',
+    '## どのツールを使うか',
     '- パソコンに入っているアプリを開く・起動する → open_app（name にはアプリの一覧の名前を入れる）',
-    '- YouTube のチャンネル・動画や、プライムビデオの作品を、名前を言って開く・見る・流す（「YouTube でヒカキン開いて」「プライムビデオでハンターハンター見たい」）→ open_content',
-    '- YouTube や Amazon などの Web サイトを開く・そのサイトの中で「探して」「検索して」→ open_website',
-    '- サイトを指定せずに「〜を調べて」「〜って何？を検索して」→ web_search',
+    '- YouTube のチャンネル・動画や、プライムビデオの作品を、名前を言って「開いて」「見たい」「流して」→ open_content',
+    '- Web サイトを開く・サイトの中で「探して」「検索して」→ open_website（探す言葉は query）',
+    '- サイトを言わずに「〜を調べて」→ web_search',
     '- ダウンロード・ドキュメント・デスクトップなどのフォルダを開く → open_folder',
-    '- 天気・気温・雨・傘などを聞かれた → get_weather',
-    '- 音量を上げる・下げる・ミュート、曲の再生・一時停止・次の曲・前の曲 → media_control',
-    '- 「〇分後に教えて」「〇時に〜って言って」などのタイマー・リマインダー → set_timer。取り消し → cancel_timers',
-    '- 「コピーした文章」「これ」「クリップボード」を要約・翻訳・説明・添削してと言われた → read_clipboard で中身を読む',
-    '  会話に出てきていない「これ」「この〜」（「このエラーどういう意味？」「これ何？」「これ訳して」）も、コピーした文章のことなので read_clipboard。',
-    '  write_clipboard は「クリップボードに入れて」「コピーしといて」「貼れるようにして」とはっきり言われたときだけ使う。要約・翻訳・説明だけなら使わない。',
-    '  時刻の指定（「7時半」「朝7時」「19時」）は at に "07:30" のように 24 時間表記で入れる。「〇分後」は minutes、「〇秒後」は seconds に入れる（秒を minutes に入れない）。',
-    '  message には、時間になったときに伝える内容を書く（「〜って言って」ではなく「カップラーメンができたよ」のように）。',
-    'アプリとサイトの両方がある名前（Spotify、Discord など）は、入っていればアプリを開く。',
-    '一覧にないアプリを頼まれても、似た別のアプリに置き換えず、言われた名前のまま name に入れる（例: 一覧に Chrome がなくても name は "Chrome"。Microsoft Edge にしない）。',
-    '頼みが複数あれば、それぞれツールを呼ぶ。ツールの結果が返ってきたら、それを見て、まだ残っている頼みがあれば次のツールを呼ぶ',
-    '（例:「明日雨なら 7 時に傘のことを教えて」→ 天気を調べ、雨ならタイマー）。全部終わったら、ツールを呼ばず「完了」とだけ答える。',
-    '同じツールを同じ内容で 2 回呼ばない。',
-    '普通の会話や質問（「今日疲れた」「おすすめの映画は？」など）には、ツールを呼ばず「なし」とだけ答えてください。',
+    '- 天気・気温・雨・傘 → get_weather',
+    '- 音量（上げる・下げる・ミュート）、曲（再生・止める・次・前）→ media_control',
+    '- タイマー・リマインダー → set_timer。取り消し → cancel_timers',
+    '- コピーした文章の要約・翻訳・説明・添削 → read_clipboard',
+    '',
+    '## 例',
+    '- 「YouTube 開いて」→ open_website(site=youtube)',
+    '- 「YouTube で猫の動画探して」→ open_website(site=youtube, query=猫の動画)（「探して」は検索。open_content ではない）',
+    '- 「YouTube でヒカキン開いて」→ open_content(site=youtube, name=ヒカキン, kind=channel)',
+    '- 「lofi 流して」→ open_content(site=youtube, name=lofi, kind=video)',
+    '- 「プライムビデオでハンターハンター見たい」→ open_content(site=primevideo, name=ハンターハンター)',
+    '- 「ディスコード起動して」→ open_app(name=Discord)',
+    '- 「次の曲にして」「曲飛ばして」→ media_control(action=next)',
+    '- 「音楽止めて」→ media_control(action=play_pause)',
+    '- 「ちょっとだけ音量下げて」→ media_control(action=volume_down, steps=2)',
+    '- 「これ日本語に訳して」「このエラーどういう意味？」「これ要約して」→ read_clipboard',
+    '- 「3分後に教えて」→ set_timer(minutes=3)、「15秒後に」→ set_timer(seconds=15)、「7時半に起こして」→ set_timer(at="07:30")',
+    '',
+    '## 細かい決まり',
+    '- 会話に出てきていない「これ」「この〜」は、コピーした文章のこと。まず read_clipboard で読む',
+    '- write_clipboard は「クリップボードに入れて」「コピーしといて」「貼れるようにして」とはっきり言われたときだけ使う',
+    '- タイマーの時刻（「7時半」「朝7時」「19時」）は at に 24 時間表記で入れる。「〇分後」は minutes、「〇秒後」は seconds',
+    '- タイマーの message には、時間になったときに伝える内容を書く（「〜って言って」ではなく「カップラーメンができたよ」）',
+    '- アプリとサイトの両方がある名前（Spotify、Discord など）は、入っていればアプリを開く',
+    '- 一覧にないアプリを頼まれても、似た別のアプリに置き換えず、言われた名前のまま name に入れる（一覧に Chrome がなくても name は "Chrome"）',
+    '- 頼みが複数あれば、それぞれツールを呼ぶ。ツールの結果を見て、まだ残っている頼みがあれば次のツールを呼ぶ',
+    '  （「明日雨なら 7 時に傘のことを教えて」→ 天気を調べ、雨ならタイマー）。全部終わったら、ツールを呼ばず「完了」とだけ答える',
+    '- 同じツールを同じ内容で 2 回呼ばない',
+    '- 普通の会話や質問（「今日疲れた」「おすすめの映画は？」）には、ツールを呼ばず「なし」とだけ答える',
   ].join('\n'),
   en: [
     "You decide which tools the user's request needs and carry it out. Look at the user's last message and call the tools it needs.",
+    '',
+    '## Which tool',
     '- Open or launch an app installed on the computer → open_app (put a name from the app list in name)',
-    '- Open / watch / play a specific YouTube channel or video, or a Prime Video title, by name ("open HikakinTV on YouTube", "I want to watch Hunter x Hunter on Prime Video") → open_content',
-    '- Open a website such as YouTube or Amazon, or "search" / "look for" something inside it → open_website',
-    '- "Look up ..." or "search for ..." without naming a site → web_search',
+    '- "Open" / "watch" / "play" a specific YouTube channel or video, or a Prime Video title, by name → open_content',
+    '- Open a website, or "search" / "look for" something inside it → open_website (the words to search go in query)',
+    '- "Look up ..." without naming a site → web_search',
     '- Open a folder such as Downloads, Documents or Desktop → open_folder',
-    '- Questions about the weather, temperature, rain, umbrellas and so on → get_weather',
-    '- Volume up / down / mute, play / pause, next / previous track → media_control',
-    '- Timers and reminders ("tell me in 10 minutes", "remind me at 7 to ...") → set_timer. To cancel them → cancel_timers',
-    '- Asked to summarize / translate / explain / proofread "what I copied", "this" or "the clipboard" → read it with read_clipboard',
-    '  "this" / "this error" that has not come up in the conversation ("what does this error mean?", "what is this?", "translate this") also means the copied text, so use read_clipboard.',
-    '  Use write_clipboard only when the user clearly says "put it on the clipboard", "copy it" or "so I can paste it"; never for just a summary, translation or explanation.',
-    '  For a clock time ("7:30", "7 am", "7 pm") put it in at as 24-hour "07:30". "in N minutes" goes in minutes and "in N seconds" goes in seconds (never put seconds in minutes).',
-    '  In message, write what to tell the user ("your noodles are ready"), not the request itself.',
-    'If something exists both as an app and a website (Spotify, Discord, ...), open the app when it is installed.',
-    'If the requested app is not in the list, do not swap in a similar app; put the name exactly as the user said it (e.g. if Chrome is not listed, name is "Chrome", not Microsoft Edge).',
-    'If there are several requests, call a tool for each. When tool results come back, look at them and call the next tool if any request is left',
-    '(e.g. "if it rains tomorrow, remind me about an umbrella at 7" → check the weather, then set a timer only if it rains). When everything is done, do not call any tool and reply only with "done".',
-    'Never call the same tool with the same arguments twice.',
-    'For ordinary chat or questions ("I\'m tired", "any movie recommendations?"), do not call any tool and reply only with "none".',
+    '- Weather, temperature, rain, umbrellas → get_weather',
+    '- Volume (up, down, mute) and music (play, pause, next, previous) → media_control',
+    '- Timers and reminders → set_timer. Cancel them → cancel_timers',
+    '- Summarize / translate / explain / proofread copied text → read_clipboard',
+    '',
+    '## Examples',
+    '- "Open YouTube" → open_website(site=youtube)',
+    '- "Search YouTube for cat videos" → open_website(site=youtube, query=cat videos) ("search" means the search results, not open_content)',
+    '- "Open HikakinTV on YouTube" → open_content(site=youtube, name=HikakinTV, kind=channel)',
+    '- "Play lofi" → open_content(site=youtube, name=lofi, kind=video)',
+    '- "I want to watch Hunter x Hunter on Prime Video" → open_content(site=primevideo, name=Hunter x Hunter)',
+    '- "Launch Discord" → open_app(name=Discord)',
+    '- "Next song" / "Skip this track" → media_control(action=next)',
+    '- "Pause the music" → media_control(action=play_pause)',
+    '- "Turn the volume down a little" → media_control(action=volume_down, steps=2)',
+    '- "Translate this into Japanese" / "What does this error mean?" / "Summarize this" → read_clipboard',
+    '- "Tell me in 3 minutes" → set_timer(minutes=3), "in 15 seconds" → set_timer(seconds=15), "wake me up at 7:30" → set_timer(at="07:30")',
+    '',
+    '## Details',
+    '- "this" / "this ..." that has not come up in the conversation means the copied text. Read it first with read_clipboard',
+    '- Use write_clipboard only when the user clearly says "put it on the clipboard", "copy it" or "so I can paste it"',
+    '- Clock times ("7:30", "7 am", "7 pm") go in at as 24-hour "07:30". "in N minutes" goes in minutes, "in N seconds" in seconds',
+    '- In the timer message, write what to tell the user ("your noodles are ready"), not the request itself',
+    '- If something exists both as an app and a website (Spotify, Discord, ...), open the app when it is installed',
+    '- If the requested app is not in the list, do not swap in a similar app; put the name exactly as the user said it (if Chrome is not listed, name is "Chrome")',
+    '- If there are several requests, call a tool for each. Look at the tool results and call the next tool if any request is left',
+    '  ("if it rains tomorrow, remind me about an umbrella at 7" → check the weather, then a timer only if it rains). When everything is done, do not call any tool and reply only with "done"',
+    '- Never call the same tool with the same arguments twice',
+    '- For ordinary chat or questions ("I\'m tired", "any movie recommendations?"), do not call any tool and reply only with "none"',
   ].join('\n'),
 };
 const routerPrompt = (lang) => ROUTER_PROMPTS[lang] || ROUTER_PROMPTS.ja;
@@ -378,9 +412,25 @@ function buildTools(config, lang = 'ja', apps = []) {
 }
 
 // 入っているアプリから一番近いものを起動する
+const squash = (t) => String(t || '').normalize('NFKC').toLowerCase().replace(/\s+/g, '');
+
+// 頼みの中に出てくるサイト（YouTube など）を探す
+function siteInRequest(request, config) {
+  const r = squash(request);
+  // 「x」のような短い名前は、ほかの単語の一部（Excel など）に当たらないよう、単語として出てきたときだけ
+  const has = (w) => (w.length <= 2 ? new RegExp(`(^|[^a-z])${w}([^a-z]|$)`).test(r) : r.includes(w));
+  return Object.entries(siteList(config)).find(([k, site]) => has(k) || has(squash(site.name).replace(/[（(].*$/, '')))?.[0];
+}
+
 async function openApp({ name }, ctx) {
-  const { apps = [], launchApp, shell, lang, config } = ctx;
+  const { apps = [], launchApp, shell, lang, config, request = '' } = ctx;
   const en = lang === 'en';
+  // 頼みにサイトの名前があって、選んだアプリの名前が頼みに無ければ、そのサイトを開く
+  // （「YouTube 開いて」で Microsoft Edge を開いてしまうのを防ぐ）
+  const site = siteInRequest(request, config);
+  if (site && !squash(request).includes(squash(name)) && !findApp(apps, request).app) {
+    return openWebsite({ site }, ctx);
+  }
   const { app, candidates } = findApp(apps, name);
   if (!app) {
     // アプリが入っていなくても、同じ名前のサイトがあればそちらを開く（YouTube、Spotify など）
@@ -422,7 +472,10 @@ async function openWebsite({ site, query, url }, { config, shell, lang }) {
 async function openContent({ site, name, kind = 'any' }, ctx) {
   const { shell, lang } = ctx;
   const en = lang === 'en';
-  if (!name) return en ? 'There was no name to open.' : '開くものの名前がありませんでした。';
+  // 名前が無い・サイト名そのもの・"any" なら、そのサイトのトップを開く
+  if (!name || /^(any|youtube|primevideo|prime video|ユーチューブ|プライムビデオ)$/i.test(String(name).trim())) {
+    return openWebsite({ site: site === 'primevideo' ? 'primevideo' : 'youtube' }, ctx);
+  }
   let hit = null;
   try {
     hit = site === 'primevideo' ? await resolvePrimeVideo(name, lang) : await resolveYouTube(name, kind, lang);
@@ -609,6 +662,9 @@ async function runTool(name, args, ctx) {
 // （小さいモデルは、終わったあとも余計なツール（検索など）を呼び続けることがあるため）
 const INFO_TOOLS = new Set(['get_weather', 'read_clipboard']);
 
+// 「これ訳して」「このエラーどういう意味？」のような、コピーした文章についての頼み
+const CLIPBOARD_REQUEST = /(これ|この|コピーした|クリップボード).*(訳|翻訳|要約|まとめ|説明|意味|直して|添削|読んで|英語|日本語)|(translate|summari[sz]e|explain|proofread).*(this|what i copied|clipboard)|what does this .* mean/i;
+
 async function runAgent({ chat, history, tools, ctx: baseCtx, maxSteps = 5, log = () => {} }) {
   let ctx = baseCtx;
   // 判定役には、最後の発言と、その直前のキャラの返事（「これ」などが何を指すかの手がかり）だけを渡す。
@@ -621,8 +677,15 @@ async function runAgent({ chat, history, tools, ctx: baseCtx, maxSteps = 5, log 
   ctx = { ...ctx, request, show };
   const results = [];
   const done = new Set();
+  let readClipboard = false;
   for (let step = 0; step < maxSteps; step++) {
-    const { toolCalls = [] } = await chat(messages, tools);
+    let { toolCalls = [] } = await chat(messages, tools);
+    // 何も呼ばなかったが「これ訳して」のような頼みなら、クリップボードを読む
+    if (step === 0 && !toolCalls.length && CLIPBOARD_REQUEST.test(request)) {
+      toolCalls = [{ function: { name: 'read_clipboard', arguments: {} } }];
+    }
+    // クリップボードを読んだあとは、書き込み以外は呼ばせない（訳した文章で検索する、などを防ぐ）
+    if (readClipboard) toolCalls = toolCalls.filter((c) => c.function.name === 'write_clipboard');
     // 小さいモデルは同じ呼び出しを繰り返すことがある（同じアプリが 2 回開くのを防ぐ）
     const fresh = toolCalls.filter((c) => {
       const key = `${c.function.name}:${JSON.stringify(Object.entries(c.function.arguments || {}).sort())}`;
@@ -638,6 +701,7 @@ async function runAgent({ chat, history, tools, ctx: baseCtx, maxSteps = 5, log 
       log(step, name, args, result);
       results.push({ name, result });
       messages.push({ role: 'tool', content: result, tool_name: name });
+      if (name === 'read_clipboard') readClipboard = true;
     }
     // 調べただけの回なら、結果を見て続ける。何かを実行した回なら、そこで終わり
     if (!fresh.some((c) => INFO_TOOLS.has(c.function.name))) break;
