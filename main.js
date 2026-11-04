@@ -247,7 +247,44 @@ ipcMain.handle('set-top-extra', (_e, extra) => {
   return height - WIN_H;
 });
 
-ipcMain.on('show-menu', (event, extra) => {
+// 音声認識のモデルの選択肢（メモリと正確さのどちらを取るか）
+const SPEECH_MODELS = {
+  accurate: { model: 'onnx-community/whisper-large-v3-turbo', dtype: { encoder_model: 'q8', decoder_model_merged: 'q4' } },
+  light: { model: 'onnx-community/whisper-small', dtype: { encoder_model: 'q8', decoder_model_merged: 'q8' } },
+};
+
+async function ollamaModels() {
+  try {
+    const res = await fetch(`${config.ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(1000) });
+    const { models = [] } = await res.json();
+    return models.map((m) => m.name).sort();
+  } catch {
+    return null;
+  }
+}
+
+// 会話のモデルを切り替える（次の返事から使う）
+function switchChatModel(name) {
+  writeLocalConfig({ ollamaModel: name });
+  loadConfig();
+}
+
+// 音声認識のモデルを切り替える（今のモデルをメモリから外して、新しいモデルを読み込み直す）
+async function switchSpeechModel(id) {
+  const choice = SPEECH_MODELS[id];
+  if (!choice) return;
+  writeLocalConfig({ stt: { ...(readLocalConfig().stt || {}), ...choice } });
+  loadConfig();
+  const old = asrPromise;
+  asrPromise = null;
+  asrReady = false;
+  win?.webContents.send('stt-status', { ready: false });
+  try { await (await old)?.dispose?.(); } catch {}
+  if (config.stt?.enabled) loadAsr().catch(() => {});
+}
+
+ipcMain.on('show-menu', async (event, extra) => {
+  const chatModels = await ollamaModels();
   const T = strings(config.lang);
   const characters = Object.entries(rawConfig.characters || {});
   const poses = extra?.poses;
@@ -293,6 +330,31 @@ ipcMain.on('show-menu', (event, extra) => {
     { label: T.colorSettings, click: () => openThemeWindow() },
     { label: T.hotkeySettings, click: () => openHotkeyWindow() },
     { label: T.setup, click: () => openSetupWindow() },
+    {
+      label: T.models,
+      submenu: [
+        {
+          label: T.chatModel,
+          submenu: chatModels?.length
+            ? chatModels.map((name) => ({
+              label: name,
+              type: 'radio',
+              checked: name === config.ollamaModel,
+              click: () => { if (name !== config.ollamaModel) switchChatModel(name); },
+            }))
+            : [{ label: T.chatModelNone, enabled: false }],
+        },
+        {
+          label: T.speechModel,
+          submenu: [['accurate', T.speechAccurate], ['light', T.speechLight]].map(([id, label]) => ({
+            label,
+            type: 'radio',
+            checked: (config.stt?.model || SPEECH_MODELS.accurate.model) === SPEECH_MODELS[id].model,
+            click: () => { if (config.stt?.model !== SPEECH_MODELS[id].model) switchSpeechModel(id); },
+          })),
+        },
+      ],
+    },
     {
       label: T.language,
       submenu: [['auto', T.langAuto], ['ja', '日本語'], ['en', 'English']].map(([id, label]) => ({
