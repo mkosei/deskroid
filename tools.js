@@ -17,6 +17,9 @@ const ROUTER_PROMPTS = {
     '- 天気・気温・雨・傘などを聞かれた → get_weather',
     '- 音量を上げる・下げる・ミュート、曲の再生・一時停止・次の曲・前の曲 → media_control',
     '- 「〇分後に教えて」「〇時に〜って言って」などのタイマー・リマインダー → set_timer。取り消し → cancel_timers',
+    '- 「コピーした文章」「これ」「クリップボード」を要約・翻訳・説明・添削してと言われた → read_clipboard で中身を読む',
+    '  会話に出てきていない「これ」「この〜」（「このエラーどういう意味？」「これ何？」「これ訳して」）も、コピーした文章のことなので read_clipboard。',
+    '  write_clipboard は「クリップボードに入れて」「コピーしといて」「貼れるようにして」とはっきり言われたときだけ使う。要約・翻訳・説明だけなら使わない。',
     '  時刻の指定（「7時半」「朝7時」「19時」）は at に "07:30" のように 24 時間表記で入れる。「〇分後」は minutes、「〇秒後」は seconds に入れる（秒を minutes に入れない）。',
     '  message には、時間になったときに伝える内容を書く（「〜って言って」ではなく「カップラーメンができたよ」のように）。',
     'アプリとサイトの両方がある名前（Spotify、Discord など）は、入っていればアプリを開く。',
@@ -35,6 +38,9 @@ const ROUTER_PROMPTS = {
     '- Questions about the weather, temperature, rain, umbrellas and so on → get_weather',
     '- Volume up / down / mute, play / pause, next / previous track → media_control',
     '- Timers and reminders ("tell me in 10 minutes", "remind me at 7 to ...") → set_timer. To cancel them → cancel_timers',
+    '- Asked to summarize / translate / explain / proofread "what I copied", "this" or "the clipboard" → read it with read_clipboard',
+    '  "this" / "this error" that has not come up in the conversation ("what does this error mean?", "what is this?", "translate this") also means the copied text, so use read_clipboard.',
+    '  Use write_clipboard only when the user clearly says "put it on the clipboard", "copy it" or "so I can paste it"; never for just a summary, translation or explanation.',
     '  For a clock time ("7:30", "7 am", "7 pm") put it in at as 24-hour "07:30". "in N minutes" goes in minutes and "in N seconds" goes in seconds (never put seconds in minutes).',
     '  In message, write what to tell the user ("your noodles are ready"), not the request itself.',
     'If something exists both as an app and a website (Spotify, Discord, ...), open the app when it is installed.',
@@ -282,6 +288,32 @@ function buildTools(config, lang = 'ja', apps = []) {
     },
   });
 
+  tools.push({
+    type: 'function',
+    function: {
+      name: 'read_clipboard',
+      description: en
+        ? 'Read the text the user copied (the clipboard). Use it when asked about "what I copied" or "this".'
+        : 'ユーザーがコピーした文章（クリップボード）を読む。「コピーした文章」「これ」について頼まれたときに使う。',
+      parameters: { type: 'object', properties: {} },
+    },
+  });
+
+  tools.push({
+    type: 'function',
+    function: {
+      name: 'write_clipboard',
+      description: en
+        ? 'Put text on the clipboard so the user can paste it (e.g. a translation or a rewritten text).'
+        : 'ユーザーが貼り付けられるよう、文章をクリップボードに入れる（翻訳や書き直した文章など）。',
+      parameters: {
+        type: 'object',
+        properties: { text: { type: 'string', description: en ? 'The full text to put on the clipboard' : 'クリップボードに入れる文章の全文' } },
+        required: ['text'],
+      },
+    },
+  });
+
   const placeMap = config.weather?.places || {};
   const places = Object.keys(placeMap);
   if (places.length) {
@@ -466,6 +498,37 @@ async function cancelTimersTool(_args, { timers, lang }) {
   return n ? `タイマーを ${n} 件取り消しました。` : 'セットしてあるタイマーはありませんでした。';
 }
 
+// クリップボードはローカルの AI（Ollama）にしか渡さない。長すぎるときは先頭だけにする
+const CLIPBOARD_LIMIT = 6000;
+
+async function readClipboardTool(_args, { clipboard, lang }) {
+  const en = lang === 'en';
+  const text = (clipboard.readText() || '').trim();
+  if (!text) return en ? 'The clipboard is empty (no text has been copied).' : 'クリップボードは空でした（文章がコピーされていません）。';
+  const cut = text.length > CLIPBOARD_LIMIT;
+  const body = cut ? text.slice(0, CLIPBOARD_LIMIT) : text;
+  if (en) return `When the user says "this" or "what I copied", they mean this text from the clipboard (${text.length} characters${cut ? `, first ${CLIPBOARD_LIMIT} shown` : ''}):\n<<<\n${body}\n>>>`;
+  return `ユーザーが「これ」「コピーした文章」と言っているのは、クリップボードにある次の文章です（${text.length} 文字${cut ? `。長いので最初の ${CLIPBOARD_LIMIT} 文字だけ` : ''}）:\n<<<\n${body}\n>>>`;
+}
+
+// 「クリップボードに入れて」「コピーしといて」「貼れるように」などと頼まれたときだけ書き込む（コピーしてあるものを勝手に消さない）
+const ASKED_TO_WRITE = /クリップボード|コピーし(て|と)|貼(り付け|れる|って)|ペースト|clipboard|copy (it|that|this)|paste/i;
+
+async function writeClipboardTool({ text }, { clipboard, lang, request = '', show }) {
+  const en = lang === 'en';
+  if (!text) return en ? 'There was no text to put on the clipboard.' : 'クリップボードに入れる文章がありませんでした。';
+  show?.push(String(text));
+  if (!ASKED_TO_WRITE.test(request)) {
+    return en
+      ? 'Made the text (it will be shown in the speech bubble). The clipboard was not changed, because the user did not ask for that.'
+      : '文章を作りました（吹き出しに表示されます）。頼まれていないので、クリップボードは書き換えていません。';
+  }
+  clipboard.writeText(String(text));
+  return en
+    ? `Made the text and put it on the clipboard (${String(text).length} characters; it will also be shown in the speech bubble). The user can paste it with Ctrl+V.`
+    : `文章を作ってクリップボードに入れました（${String(text).length} 文字。吹き出しにも表示されます）。Ctrl+V で貼り付けられます。`;
+}
+
 const HANDLERS = {
   open_app: openApp,
   open_website: openWebsite,
@@ -475,9 +538,11 @@ const HANDLERS = {
   media_control: mediaControlTool,
   set_timer: setTimerTool,
   cancel_timers: cancelTimersTool,
+  read_clipboard: readClipboardTool,
+  write_clipboard: writeClipboardTool,
 };
 
-// ctx: { config, shell, lang, apps, launchApp, folders, mediaControl, timers }
+// ctx: { config, shell, lang, apps, launchApp, folders, mediaControl, timers, clipboard, request（ユーザーの最後の発言） }
 async function runTool(name, args, ctx) {
   const en = ctx?.lang === 'en';
   const handler = HANDLERS[name];
@@ -492,8 +557,12 @@ async function runTool(name, args, ctx) {
 // エージェントループ：判定役にツールを選ばせて実行し、結果を返してまた考えさせる。
 // 「全部終わった（ツールを呼ばない）」と言うか、maxSteps 回で止める
 // chat(messages, tools) は { toolCalls } を返す関数（main.js は Ollama のストリーム、テストは普通の fetch）
-async function runAgent({ chat, history, tools, ctx, maxSteps = 5, log = () => {} }) {
+async function runAgent({ chat, history, tools, ctx: baseCtx, maxSteps = 5, log = () => {} }) {
+  let ctx = baseCtx;
   const messages = [{ role: 'system', content: routerPrompt(ctx.lang) }, ...history];
+  const request = [...history].reverse().find((m) => m.role === 'user')?.content || '';
+  const show = []; // 返事のあとに吹き出しへそのまま出す文章（翻訳など）
+  ctx = { ...ctx, request, show };
   const results = [];
   const done = new Set();
   for (let step = 0; step < maxSteps; step++) {
@@ -511,25 +580,41 @@ async function runAgent({ chat, history, tools, ctx, maxSteps = 5, log = () => {
       const { name, arguments: args } = call.function;
       const result = await runTool(name, args, ctx);
       log(step, name, args, result);
-      results.push(result);
+      results.push({ name, result });
       messages.push({ role: 'tool', content: result, tool_name: name });
     }
   }
-  return results;
+  // 作った文章（翻訳など）を吹き出しに出すときは、元のクリップボードの文章を返事役に渡さない（同じ内容を二度言わせない）
+  const forReply = results.filter((r) => !(show.length && r.name === 'read_clipboard')).map((r) => r.result);
+  return { results: forReply, show };
 }
 
 // ツールの結果をキャラ側に渡すときの添え書き
+// 返事役（キャラ）に渡す、ユーザーの最後の発言の中身を作る
+// - 作った文章（翻訳など）を吹き出しに出すとき：中身は見せず、「渡すときの一言」だけを頼む（同じ内容を二度言わせない）
+// - ツールを使ったとき：発言のあとに結果の添え書きを付ける
+function replyMessage(userText, results, show, lang = 'ja') {
+  if (show.length) {
+    return lang === 'en'
+      ? `(System note: you have finished making the text the user asked for ("${userText}"). It is shown in the speech bubble right after your reply. Say just one short line, in character, as you hand it over. Do not repeat the text.)`
+      : `（システムより：ユーザーの頼み「${userText}」に応えて、文章を作り終えました。文章はあなたの返事のすぐあとに吹き出しへ表示されます。キャラとして、渡すときの一言だけを短く言ってください。文章の中身は繰り返さないでください）`;
+  }
+  return results.length ? `${userText}\n\n${resultNote(results, lang)}` : userText;
+}
+
 function resultNote(results, lang = 'ja') {
   if (lang === 'en') {
     return `(System note: you just carried out this request. Result: ${results.join(' ')} `
-      + 'Tell the user about it briefly and naturally. If you opened something, say that you just opened it, like "There you go, it\'s open!". '
+      + 'Tell the user about it briefly and naturally. Only if you opened something, say that you just opened it, like "There you go, it\'s open!". '
       + "If it failed or wasn't found, say so honestly. If you set a timer, only say when it will go off; it hasn't happened yet, so don't say the message as if it already did. "
+      + 'If the result contains clipboard text, use it to do what the user asked (summarize, explain, ...); for that, you may use more sentences than usual. '
       + "For the weather, don't just list the numbers; tell them what matters, like rain or what to wear, in a conversational way.)";
   }
   return `（システムより：あなたが今この依頼を実行しました。結果: ${results.join(' ')} `
-    + 'この結果をもとに短く自然に伝えてください。何かを開いた場合は「開いたよ」のように今開いたことを伝え、'
+    + 'この結果をもとに短く自然に伝えてください。何かを開いた場合だけ「開いたよ」のように今開いたことを伝え、'
     + '見つからなかったり失敗したりした場合は正直にそう伝えてください。タイマーをセットした場合は、いつ知らせるかだけを伝え、まだ時間になっていないので、伝える内容をもう起きたことのように言わないでください。'
+    + 'クリップボードの文章が結果に入っていたら、それを使って頼まれたこと（要約・説明など）に答えてください。そのときは、いつもより長くなってもかまいません。'
     + '天気の場合は数字をそのまま並べず、雨や服装など大事なところを話し言葉で伝えてください）';
 }
 
-module.exports = { ROUTER_PROMPT, routerPrompt, buildTools, runTool, runAgent, resultNote, customApps, timerDelay };
+module.exports = { ROUTER_PROMPT, routerPrompt, buildTools, runTool, runAgent, resultNote, replyMessage, customApps, timerDelay };

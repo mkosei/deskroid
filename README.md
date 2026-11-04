@@ -31,6 +31,7 @@ Chat, speech recognition and text-to-speech all run locally, so there are no clo
 - Ask for the weather forecast, e.g. "what's the weather tomorrow?"
 - Control the volume and playback, e.g. "turn the volume up a little", "pause the music", "next track"
 - Timers and reminders, e.g. "tell me in 3 minutes that my noodles are ready", "wake me up at 7:30" (the character tells you by speech bubble and voice; timers are cleared when the app quits)
+- Work with text you copied, e.g. "summarize what I copied", "translate this into Japanese", "what does this error mean?" (the clipboard is only read when you ask, and only changed when you say "put it on the clipboard")
 - Several requests at once, and requests that depend on a result, e.g. "open YouTube and turn the volume up", "if it rains tomorrow, remind me at 7 am to take an umbrella"
 - Import your own models (Live2D / 3D) and switch between characters
 - 3D models: bones are detected automatically to add eye contact, breathing, waving, standing poses and leg crossing
@@ -173,6 +174,7 @@ Example requests:
 - "Open the calculator", "Launch Discord", "Open Excel"
 - "Turn the volume up a little", "Pause the music", "Remind me in 5 minutes to check the oven", "Wake me up at 7:30"
 - "Open YouTube and turn the volume up", "If it rains tomorrow, remind me at 7 am to take an umbrella"
+- (after copying some text) "Summarize this", "Translate this into English and put it on the clipboard", "What does this error mean?"
 - "Open YouTube", "Find cat videos on YouTube", "Look up how to make carbonara", "Open my Downloads folder"
 - "What's the weather today?", "Will it rain in Chiba tomorrow?"
 

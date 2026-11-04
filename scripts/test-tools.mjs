@@ -7,7 +7,7 @@ import path from 'path';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const { buildTools, runAgent, resultNote, customApps } = require('../tools.js');
+const { buildTools, runAgent, replyMessage, customApps } = require('../tools.js');
 const { listApps } = require('../pc-apps.js');
 
 const args = process.argv.slice(2);
@@ -25,6 +25,9 @@ const fakeShell = {
 };
 const fakeLaunch = async (app) => { opened.push(`app ${app.name}`); };
 const fakeMedia = async (action, steps) => { opened.push(`media ${action} x${steps}`); return true; };
+// クリップボードの中身は環境変数 CLIP で渡せる（例: CLIP="英語の文章" node scripts/test-tools.mjs "これ訳して"）
+let clip = process.env.CLIP || '';
+const fakeClipboard = { readText: () => clip, writeText: (t) => { clip = t; opened.push(`clipboard <- ${t.slice(0, 80)}${t.length > 80 ? '…' : ''}`); } };
 const fakeTimers = { add: (ms, message) => opened.push(`timer ${Math.round(ms / 1000)}s "${message}"`), cancelAll: () => 0 };
 const home = os.homedir();
 const folders = {
@@ -32,7 +35,7 @@ const folders = {
   pictures: path.join(home, 'Pictures'), music: path.join(home, 'Music'), videos: path.join(home, 'Videos'), home,
 };
 const apps = await listApps({ extra: customApps(config) });
-const ctx = { config, shell: fakeShell, lang, apps, launchApp: fakeLaunch, folders, mediaControl: fakeMedia, timers: fakeTimers };
+const ctx = { config, shell: fakeShell, lang, apps, launchApp: fakeLaunch, folders, mediaControl: fakeMedia, timers: fakeTimers, clipboard: fakeClipboard };
 const tools = buildTools(config, lang, apps);
 
 const prompts = args.filter((a) => !a.startsWith('--')).length ? args.filter((a) => !a.startsWith('--')) : lang === 'en' ? [
@@ -76,7 +79,7 @@ for (const p of prompts) {
   const t = Date.now();
   opened.length = 0;
   const steps = [];
-  const results = await runAgent({
+  const { results, show } = await runAgent({
     chat: async (msgs, t) => ({ toolCalls: (await chat(msgs, t)).tool_calls || [] }),
     history: [{ role: 'user', content: p }],
     tools,
@@ -88,8 +91,9 @@ for (const p of prompts) {
   if (opened.length) console.log(`    opened: ${opened.join(' / ')}`);
   if (results.length) console.log(`    result: ${results.join(' ')}`);
   if (withReply) {
-    const user = results.length ? `${p}\n\n${resultNote(results, lang)}` : p;
+    const user = replyMessage(p, results, show, lang);
     const reply = await chat([{ role: 'system', content: persona }, { role: 'user', content: user }], false);
     console.log(`    reply: ${reply.content.replace(/\n/g, ' ')}`);
+    for (const text of show) console.log(`    + bubble: ${text.replace(/\n/g, ' ')}`);
   }
 }

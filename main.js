@@ -1,10 +1,10 @@
-const { app, BrowserWindow, ipcMain, Menu, screen, globalShortcut, shell, dialog, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, screen, globalShortcut, shell, dialog, Notification, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { spawn } = require('child_process');
 const { pathToFileURL } = require('url');
-const { buildTools, runAgent, resultNote, customApps } = require('./tools');
+const { buildTools, runAgent, replyMessage, customApps } = require('./tools');
 const { mediaControl } = require('./pc-control');
 const { listApps, launchApp } = require('./pc-apps');
 const { MODEL_FILTERS, importModel, defaultPersona } = require('./model-import');
@@ -384,9 +384,9 @@ const timerApi = {
 
 // ①判定役がツールを選んで実行し、結果を見てまた考える（エージェントループ）→ ②キャラとして結果を踏まえて返事
 async function runTools(messages) {
-  const ctx = { ...(await toolContext()), mediaControl, timers: timerApi };
+  const ctx = { ...(await toolContext()), mediaControl, timers: timerApi, clipboard };
   const tools = buildTools(config, config.lang, ctx.apps);
-  if (!tools.length) return [];
+  if (!tools.length) return { results: [], show: [] };
   const history = messages.filter((m) => m.role !== 'system').slice(-4);
   return runAgent({
     chat: (msgs, t) => streamOllama(msgs, t, () => {}),
@@ -402,13 +402,15 @@ ipcMain.handle('chat', async (event, { id, messages }) => {
     if (!event.sender.isDestroyed()) event.sender.send(ch, { id, ...data });
   };
   try {
-    const results = await runTools(messages);
+    const { results, show } = await runTools(messages);
     const convo = [...messages];
-    if (results.length) {
+    if (results.length || show.length) {
       const last = convo[convo.length - 1];
-      convo[convo.length - 1] = { ...last, content: `${last.content}\n\n${resultNote(results, config.lang)}` };
+      convo[convo.length - 1] = { ...last, content: replyMessage(last.content, results, show, config.lang) };
     }
     await streamOllama(convo, [], (text) => send('chat-chunk', { text }));
+    // ツールが作った文章（翻訳など）は、キャラの返事のあとにそのまま出す
+    for (const text of show) send('chat-chunk', { text: `\n\n${text}` });
     send('chat-done', {});
   } catch (err) {
     const T = strings(config.lang);
