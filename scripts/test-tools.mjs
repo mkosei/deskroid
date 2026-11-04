@@ -1,6 +1,6 @@
 // ツール呼び出しの動作確認。本体と同じ tools.js / pc-apps.js を使い、
 // 「①判定役がツールを呼ぶ → ②キャラとして返事」の2段階で試す（アプリやサイトは実際には開かない）
-// 使い方: node scripts/test-tools.mjs [--en] [--no-reply] [発言 ...]
+// 使い方: [OLLAMA_MODEL=qwen3:4b] node scripts/test-tools.mjs [--en] [--no-reply] [発言 ...]
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -15,6 +15,8 @@ const lang = args.includes('--en') ? 'en' : 'ja';
 const withReply = !args.includes('--no-reply');
 const raw = JSON.parse(fs.readFileSync(new URL('../config.json', import.meta.url), 'utf8'));
 const config = { ...raw, ...raw.characters?.[raw.activeCharacter] };
+// 会話のモデルを変えて試すとき：OLLAMA_MODEL=qwen3:4b node scripts/test-tools.mjs
+if (process.env.OLLAMA_MODEL) config.ollamaModel = process.env.OLLAMA_MODEL;
 const persona = lang === 'en' ? config.persona_en || config.persona : config.persona;
 
 // 実際には開かず、何を開こうとしたかだけ記録する

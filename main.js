@@ -263,10 +263,19 @@ async function ollamaModels() {
   }
 }
 
-// 会話のモデルを切り替える（次の返事から使う）
+// 会話のモデルを切り替える（次の返事から使う）。
+// Ollama は使い終わったモデルを 5 分ほどメモリに残すので、前のモデルはすぐ外す（2 つ載ったままだとメモリを倍使う）
 function switchChatModel(name) {
+  const prev = config.ollamaModel;
   writeLocalConfig({ ollamaModel: name });
   loadConfig();
+  if (prev && prev !== name) {
+    fetch(`${config.ollamaUrl}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: prev, keep_alive: 0 }),
+    }).catch(() => {});
+  }
 }
 
 // 音声認識のモデルを切り替える（今のモデルをメモリから外して、新しいモデルを読み込み直す）
