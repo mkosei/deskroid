@@ -237,3 +237,140 @@ html, body {
 #send { background: var(--accent); color: var(--accent-text); }
 #send:hover { background: var(--accent-hover); }
 #send:disabled { background: var(--soft); color: var(--sub-text); cursor: default; }
+
+/* ---------- 時計・ポモドーロ ---------- */
+/* キャラの右下に小さく出す。入力欄が出ているときは、その上へよける */
+
+#clock {
+  position: absolute;
+  right: 12px;
+  bottom: 14px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 13px;
+  background: var(--panel);
+  color: var(--panel-text);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: 0 4px 14px var(--shadow);
+  backdrop-filter: blur(6px);
+  font-variant-numeric: tabular-nums;
+  animation: pop 0.18s ease-out;
+}
+
+#input-bar:not(.hidden) ~ #clock { bottom: 62px; }
+
+/* 左に出す設定のとき */
+#clock[data-side="left"] { right: auto; left: 12px; }
+
+#clock[data-mode="pomodoro"], #clock[data-mode="timer"] { padding-left: 6px; }
+
+/* 残り時間の輪っか（ポモドーロ・タイマーのときだけ） */
+#clock .ring {
+  display: none;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  transform: rotate(-90deg);
+}
+
+#clock[data-mode="pomodoro"] .ring, #clock[data-mode="timer"] .ring { display: block; }
+
+#clock .ring circle { fill: none; stroke-width: 4.5; }
+#clock .ring .track { stroke: var(--soft); }
+
+#clock .ring .bar {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-dasharray: 131.95;
+  stroke-dashoffset: 131.95;
+  transition: stroke-dashoffset 1s linear, stroke 0.3s;
+}
+
+/* 休憩中は落ち着いた色にする */
+#clock[data-phase="short"] .ring .bar, #clock[data-phase="long"] .ring .bar { stroke: var(--think); }
+
+.clock-body { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; }
+
+#clock-time { font-size: 17px; font-weight: 700; letter-spacing: 0.04em; }
+#clock[data-mode="clock"] #clock-time { font-size: 18px; }
+#clock.paused #clock-time { animation: blink 1.6s infinite; }
+
+#clock-sub { color: var(--sub-text); font-size: 10.5px; white-space: nowrap; }
+
+/* 長い休憩までに、何回集中を終えたか */
+#clock-dots { display: flex; gap: 3px; margin-top: 2px; }
+#clock-dots:empty { display: none; }
+
+#clock-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--soft);
+}
+
+#clock-dots i.on { background: var(--accent); }
+
+/* マウスを乗せたときだけ出す操作ボタン */
+#clock-actions { display: none; gap: 4px; }
+#clock:hover #clock-actions:not(:empty), #clock.picking #clock-actions { display: flex; }
+
+/* タイマーの長さを選んでいる間は、時刻を隠してボタンだけにする */
+#clock.picking .ring, #clock.picking .clock-body { display: none !important; }
+#clock.picking { padding-left: 6px; }
+
+#clock-actions button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--soft);
+  color: var(--accent);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+#clock-actions button:hover { background: var(--soft-hover); }
+
+/* 「5分」など文字の入るボタンは横長にする */
+#clock-actions button.pill { width: auto; min-width: 26px; padding: 0 8px; border-radius: 13px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+#clock-actions button:active { transform: scale(0.9); }
+
+/* アイコンは線で描く。マウスを乗せると、ボタンの上に名前を出す */
+#clock-actions button { position: relative; }
+
+#clock-actions button svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#clock-actions button[data-label]:hover::after {
+  content: attr(data-label);
+  position: absolute;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  padding: 3px 8px;
+  transform: translateX(-50%);
+  background: var(--panel-text);
+  color: var(--panel);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px var(--shadow);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* 右端のボタンの名前は、窓からはみ出さないよう右にそろえる（左に出しているときは、はみ出さないのでそのまま） */
+#clock[data-side="right"] #clock-actions button[data-label]:last-child:hover::after { left: auto; right: -2px; transform: none; }

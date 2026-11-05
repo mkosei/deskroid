@@ -41,6 +41,19 @@
     </button>
   </form>
 
+  <div id="clock" class="ui hidden" data-mode="clock">
+    <svg class="ring" viewBox="0 0 48 48" aria-hidden="true">
+      <circle class="track" cx="24" cy="24" r="21"/>
+      <circle id="clock-ring-bar" class="bar" cx="24" cy="24" r="21"/>
+    </svg>
+    <div class="clock-body">
+      <div id="clock-time"></div>
+      <div id="clock-sub"></div>
+      <div id="clock-dots"></div>
+    </div>
+    <div id="clock-actions"></div>
+  </div>
+
   <script src="theme.js"></script>
   <script src="app.js"></script>
 </body>

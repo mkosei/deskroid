@@ -21,6 +21,8 @@ const ROUTER_PROMPTS = {
     '- 天気・気温・雨・傘 → get_weather',
     '- 音量（上げる・下げる・ミュート）、曲（再生・止める・次・前）→ media_control',
     '- タイマー・リマインダー → set_timer。取り消し → cancel_timers',
+    '- ポモドーロ・集中タイム・作業タイマー（始める・止める・一時停止・再開・休憩に進む）→ pomodoro',
+    '- 「タイマーあと何分？」「ポモドーロあとどれくらい？」→ check_timers',
     '- コピーした文章の要約・翻訳・説明・添削 → read_clipboard',
     '',
     '## 例',
@@ -34,6 +36,8 @@ const ROUTER_PROMPTS = {
     '- 「音楽止めて」→ media_control(action=play_pause)',
     '- 「ちょっとだけ音量下げて」→ media_control(action=volume_down, steps=2)',
     '- 「これ日本語に訳して」「このエラーどういう意味？」「これ要約して」→ read_clipboard',
+    '- 「ポモドーロ始めて」「25分集中するね」→ pomodoro(action=start)、「50分集中・10分休憩でポモドーロ」→ pomodoro(action=start, focus_minutes=50, break_minutes=10)',
+    '- 「ポモドーロ止めて」→ pomodoro(action=stop)、「ちょっと中断」→ pomodoro(action=pause)、「休憩に入りたい」→ pomodoro(action=skip)',
     '- 「3分後に教えて」→ set_timer(minutes=3)、「15秒後に」→ set_timer(seconds=15)、「7時半に起こして」→ set_timer(at="07:30")',
     '',
     '## 細かい決まり',
@@ -60,6 +64,8 @@ const ROUTER_PROMPTS = {
     '- Weather, temperature, rain, umbrellas → get_weather',
     '- Volume (up, down, mute) and music (play, pause, next, previous) → media_control',
     '- Timers and reminders → set_timer. Cancel them → cancel_timers',
+    '- Pomodoro / focus sessions / work timer (start, stop, pause, resume, skip to the break) → pomodoro',
+    '- "How long is left on the timer?" / "How much of the pomodoro is left?" → check_timers',
     '- Summarize / translate / explain / proofread copied text → read_clipboard',
     '',
     '## Examples',
@@ -73,6 +79,8 @@ const ROUTER_PROMPTS = {
     '- "Pause the music" → media_control(action=play_pause)',
     '- "Turn the volume down a little" → media_control(action=volume_down, steps=2)',
     '- "Translate this into Japanese" / "What does this error mean?" / "Summarize this" → read_clipboard',
+    '- "Start a pomodoro" / "I\'ll focus for 25 minutes" → pomodoro(action=start), "pomodoro with 50 minutes focus and 10 minutes break" → pomodoro(action=start, focus_minutes=50, break_minutes=10)',
+    '- "Stop the pomodoro" → pomodoro(action=stop), "pause for a sec" → pomodoro(action=pause), "I want my break now" → pomodoro(action=skip)',
     '- "Tell me in 3 minutes" → set_timer(minutes=3), "in 15 seconds" → set_timer(seconds=15), "wake me up at 7:30" → set_timer(at="07:30")',
     '',
     '## Details',
@@ -353,6 +361,40 @@ function buildTools(config, lang = 'ja', apps = []) {
   tools.push({
     type: 'function',
     function: {
+      name: 'pomodoro',
+      description: en
+        ? 'Pomodoro timer: focus and short breaks repeat; the character tells the user when each part ends. Shown on the clock next to the character.'
+        : 'ポモドーロ（集中と休憩をくり返す）。区切りごとにキャラが知らせる。キャラの横の時計に残り時間が出る。',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['start', 'pause', 'resume', 'skip', 'stop'],
+            description: en
+              ? 'start = begin, pause / resume, skip = move on to the next part (e.g. start the break now), stop = end it'
+              : 'start=始める、pause=一時停止、resume=再開、skip=今の区切りを終えて次へ（今すぐ休憩に入る など）、stop=やめる',
+          },
+          focus_minutes: { type: 'number', description: en ? 'Focus length in minutes (only when the user says it; default 25)' : '集中の分数（言われたときだけ。言われなければ入れない）' },
+          break_minutes: { type: 'number', description: en ? 'Break length in minutes (only when the user says it; default 5)' : '休憩の分数（言われたときだけ。言われなければ入れない）' },
+        },
+        required: ['action'],
+      },
+    },
+  });
+
+  tools.push({
+    type: 'function',
+    function: {
+      name: 'check_timers',
+      description: en ? 'See how much time is left on the timers and the pomodoro.' : 'セット中のタイマーとポモドーロの残り時間を見る。',
+      parameters: { type: 'object', properties: {} },
+    },
+  });
+
+  tools.push({
+    type: 'function',
+    function: {
       name: 'read_clipboard',
       description: en
         ? 'Read the text the user copied (the clipboard). Use it when asked about "what I copied" or "this".'
@@ -598,6 +640,70 @@ async function cancelTimersTool(_args, { timers, lang }) {
   return n ? `タイマーを ${n} 件取り消しました。` : 'セットしてあるタイマーはありませんでした。';
 }
 
+const PHASE_NAMES = { ja: { focus: '集中', short: '休憩', long: '長めの休憩' }, en: { focus: 'focus', short: 'break', long: 'long break' } };
+
+// 残り時間を「12 分 30 秒」のように言う
+function leftText(ms, en) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(s / 60);
+  if (en) return m ? `${m} min${s % 60 ? ` ${s % 60} s` : ''}` : `${s} s`;
+  return m ? `${m} 分${s % 60 ? ` ${s % 60} 秒` : ''}` : `${s} 秒`;
+}
+
+async function pomodoroTool({ action, focus_minutes: focus, break_minutes: shortBreak }, { pomodoro, lang }) {
+  const en = lang === 'en';
+  if (!pomodoro) return en ? 'The pomodoro is not available.' : 'ポモドーロは使えません。';
+  const P = PHASE_NAMES[en ? 'en' : 'ja'];
+  const s0 = pomodoro.state();
+  if (action === 'start') {
+    const s = pomodoro.start({ focus: Number(focus) || undefined, shortBreak: Number(shortBreak) || undefined });
+    const f = Math.round(s.total / 60000);
+    return en
+      ? `Started a pomodoro: ${f} minutes of focus now. The character will say when it is break time.`
+      : `ポモドーロを始めました。今から ${f} 分集中です。休憩の時間になったらキャラが知らせます。`;
+  }
+  if (!s0.running) return en ? 'No pomodoro is running.' : 'ポモドーロは動いていません。';
+  if (action === 'pause') {
+    pomodoro.pause();
+    return en ? `Paused the pomodoro (${P[s0.phase]}, ${leftText(s0.remaining, en)} left).` : `ポモドーロを一時停止しました（${P[s0.phase]}の残り ${leftText(s0.remaining, en)}）。`;
+  }
+  if (action === 'resume') {
+    pomodoro.resume();
+    return en ? `Resumed the pomodoro (${P[s0.phase]}, ${leftText(s0.remaining, en)} left).` : `ポモドーロを再開しました（${P[s0.phase]}の残り ${leftText(s0.remaining, en)}）。`;
+  }
+  if (action === 'skip') {
+    pomodoro.skip();
+    const s = pomodoro.state();
+    return en
+      ? `Moved on to the ${P[s.phase]} (${Math.round(s.total / 60000)} minutes).`
+      : `${P[s.phase]}に進みました（${Math.round(s.total / 60000)} 分）。`;
+  }
+  if (action === 'stop') {
+    pomodoro.stop();
+    return en ? `Stopped the pomodoro (${s0.done} focus session(s) done).` : `ポモドーロを終わりにしました（集中 ${s0.done} 回）。`;
+  }
+  return en ? 'Unknown pomodoro action.' : 'ポモドーロの操作がわかりませんでした。';
+}
+
+async function checkTimersTool(_args, { timers, pomodoro, lang }) {
+  const en = lang === 'en';
+  const P = PHASE_NAMES[en ? 'en' : 'ja'];
+  const lines = [];
+  const p = pomodoro?.state();
+  if (p?.running) {
+    lines.push(en
+      ? `Pomodoro: ${P[p.phase]}${p.paused ? ' (paused)' : ''}, ${leftText(p.remaining, en)} left, ${p.done} focus session(s) done.`
+      : `ポモドーロ：${P[p.phase]}${p.paused ? '（一時停止中）' : ''}、残り ${leftText(p.remaining, en)}、集中は ${p.done} 回終えた。`);
+  }
+  for (const t of timers?.list?.() || []) {
+    lines.push(en
+      ? `Timer "${t.message}": goes off at ${clock(new Date(t.due))}, ${leftText(t.due - Date.now(), en)} left.`
+      : `タイマー「${t.message}」：${clock(new Date(t.due))} に鳴る。残り ${leftText(t.due - Date.now(), en)}。`);
+  }
+  if (!lines.length) return en ? 'No timers or pomodoro are running.' : 'セット中のタイマーも、動いているポモドーロもありません。';
+  return lines.join(en ? ' ' : '');
+}
+
 // クリップボードはローカルの AI（Ollama）にしか渡さない。長すぎるときは先頭だけにする
 const CLIPBOARD_LIMIT = 6000;
 
@@ -639,6 +745,8 @@ const HANDLERS = {
   media_control: mediaControlTool,
   set_timer: setTimerTool,
   cancel_timers: cancelTimersTool,
+  pomodoro: pomodoroTool,
+  check_timers: checkTimersTool,
   read_clipboard: readClipboardTool,
   write_clipboard: writeClipboardTool,
 };

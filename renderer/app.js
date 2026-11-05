@@ -174,6 +174,13 @@ const UI_STRINGS = {
     placeholder: '話しかける…',
     mic: (key) => `音声会話（${key}）`,
     send: '送信',
+    weekdays: ['日', '月', '火', '水', '木', '金', '土'],
+    date: (d, w) => `${d.getMonth() + 1}/${d.getDate()}（${w}）`,
+    phases: { focus: '集中', short: '休憩', long: '長めの休憩' },
+    paused: '一時停止中',
+    timerLeft: (n) => (n > 1 ? `タイマー（ほか ${n - 1} 件）` : 'タイマー'),
+    clockButtons: { start: 'ポモドーロ', timer: 'タイマー', cancelTimers: 'タイマーを取り消す', back: 'もどる', pause: '一時停止', resume: '再開', skip: '次へ進む', stop: 'ポモドーロをやめる' },
+    timerPreset: (m) => (m >= 60 ? `${m / 60}時間` : `${m}分`),
   },
   en: {
     status: { listening: 'Listening…', thinking: 'Thinking…', speaking: 'Speaking', loading: 'Preparing speech recognition…' },
@@ -190,6 +197,13 @@ const UI_STRINGS = {
     placeholder: 'Say something…',
     mic: (key) => `Voice conversation (${key})`,
     send: 'Send',
+    weekdays: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+    date: (d, w) => `${w} ${d.getMonth() + 1}/${d.getDate()}`,
+    phases: { focus: 'Focus', short: 'Break', long: 'Long break' },
+    paused: 'Paused',
+    timerLeft: (n) => (n > 1 ? `Timer (+${n - 1} more)` : 'Timer'),
+    clockButtons: { start: 'Pomodoro', timer: 'Timer', cancelTimers: 'Cancel timers', back: 'Back', pause: 'Pause', resume: 'Resume', skip: 'Skip', stop: 'Stop pomodoro' },
+    timerPreset: (m) => (m >= 60 ? `${m / 60}h` : `${m}m`),
   },
 };
 const ui = () => UI_STRINGS[config?.lang] || UI_STRINGS.ja;
@@ -725,12 +739,12 @@ async function ask(text) {
 }
 
 // タイマー・リマインダーの時間になった：驚いた顔で知らせて、声でも伝える
-window.mate.on('timer-fired', ({ message }) => {
+window.mate.on('timer-fired', ({ message, icon = '⏰' }) => {
   character?.setExpression?.(config.expressions?.surprised, 'surprised');
   clearTimeout(expressionTimer);
   expressionTimer = setTimeout(() => character?.setExpression?.(config.expressions?.normal, 'normal'), 8000);
   character?.tap?.();
-  showBubble(`⏰ ${message}`, '');
+  showBubble(`${icon} ${message}`, '');
   enqueueSpeech(message);
   hideBubbleLater(30000);
 });
@@ -741,6 +755,142 @@ window.mate.on('reset-chat', () => {
   showBubble(ui().reset, '');
   hideBubbleLater(4000);
 });
+
+// ---------- 時計・ポモドーロ・タイマーの表示 ----------
+// ふだんは時計。ポモドーロ中は残り時間と輪っか、タイマーだけがあるときは一番近いタイマーの残り時間を出す。
+// 時間の管理は main.js がしていて、ここは受け取った状態を 1 秒ごとに描くだけ
+const clockEl = document.getElementById('clock');
+const clockTime = document.getElementById('clock-time');
+const clockSub = document.getElementById('clock-sub');
+const clockRing = document.getElementById('clock-ring-bar');
+const clockDots = document.getElementById('clock-dots');
+const clockButtons = document.getElementById('clock-actions');
+const RING_LEN = 2 * Math.PI * 21;
+let clock = null;      // main.js から受け取った状態
+
+const two = (n) => String(n).padStart(2, '0');
+function mmss(ms) {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(s / 3600);
+  return h ? `${h}:${two(Math.floor(s / 60) % 60)}:${two(s % 60)}` : `${two(Math.floor(s / 60))}:${two(s % 60)}`;
+}
+
+function setRing(frac) {
+  clockRing.style.strokeDashoffset = String(RING_LEN * (1 - Math.min(1, Math.max(0, frac))));
+}
+
+function renderClock() {
+  if (!clock) return;
+  const p = clock.pomodoro;
+  const timer = clock.timers?.[0];
+  const mode = p?.running ? 'pomodoro' : timer ? 'timer' : 'clock';
+  clockEl.classList.toggle('hidden', !clock.show && mode === 'clock');
+  clockEl.dataset.mode = mode;
+  clockEl.dataset.side = clock.side || 'right';
+  clockEl.dataset.phase = p?.running ? p.phase : '';
+  clockEl.classList.toggle('paused', !!p?.paused);
+  const now = new Date();
+  if (mode === 'pomodoro') {
+    const left = p.paused ? p.remaining : p.endsAt - Date.now();
+    clockTime.textContent = mmss(left);
+    clockSub.textContent = p.paused ? ui().paused : ui().phases[p.phase];
+    setRing(1 - left / p.total);
+    // 長い休憩までの 4 回のうち、何回終えたか
+    const inSet = p.phase === 'long' ? p.longEvery : p.done % p.longEvery;
+    clockDots.innerHTML = Array.from({ length: p.longEvery }, (_, i) => `<i class="${i < inSet ? 'on' : ''}"></i>`).join('');
+  } else if (mode === 'timer') {
+    const left = timer.due - Date.now();
+    clockTime.textContent = mmss(left);
+    clockSub.textContent = ui().timerLeft(clock.timers.length);
+    clockEl.title = timer.message;
+    setRing(1 - left / timer.total);
+    clockDots.innerHTML = '';
+  } else {
+    clockTime.textContent = `${two(now.getHours())}:${two(now.getMinutes())}`;
+    clockSub.textContent = ui().date(now, ui().weekdays[now.getDay()]);
+    clockEl.title = '';
+    clockDots.innerHTML = '';
+  }
+  renderClockButtons(mode, p);
+}
+
+// 時計にマウスを乗せたときに出すボタン（同じ並びなら作り直さない）
+// アイコンだけを並べ、マウスを乗せたボタンの上に名前（「ポモドーロ」「タイマー」など）を出す。
+// タイマーのボタンを押すと、長さを選ぶボタン（1分・3分…）に切り替わる
+const TIMER_PRESETS = [1, 3, 5, 10, 15, 30, 60];
+const ICON_PATHS = {
+  // ポモドーロ：くり返しの矢印と時計の針（集中と休憩をくり返す）
+  start: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4v3.5H16"/><path d="M12 8.5V12l2.5 1.5"/>',
+  // ストップウォッチ（タイマー）
+  timer: '<circle cx="12" cy="13.5" r="7"/><path d="M12 13.5V10M10 3h4M12 3v3.5M18 7.5l1.3-1.3"/>',
+  // ストップウォッチに斜線（タイマーを取り消す）
+  cancelTimers: '<circle cx="12" cy="13.5" r="7"/><path d="M10 3h4M12 3v3.5M7.5 9l9 9"/>',
+  pause: '<path d="M9 6v12M15 6v12"/>',
+  resume: '<path d="M8 5.5v13l10.5-6.5Z"/>',
+  skip: '<path d="M6 6v12l8.5-6Z"/><path d="M18 6v12"/>',
+  stop: '<rect x="6.5" y="6.5" width="11" height="11" rx="2"/>',
+  back: '<path d="M7 7l10 10M17 7 7 17"/>',
+};
+const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON_PATHS[name]}</svg>`;
+let pickingTimer = false;
+let clockButtonsKey = '';
+
+function renderClockButtons(mode, p) {
+  const B = ui().clockButtons;
+  let list;
+  if (pickingTimer) {
+    list = [
+      ...TIMER_PRESETS.map((m) => [`timer:${m}`, ui().timerPreset(m), () => { window.mate.timer('start', m); setPicking(false); }]),
+      ['back', null, () => setPicking(false)],
+    ];
+  } else {
+    const pomo = mode === 'pomodoro' ? [p.paused ? 'resume' : 'pause', 'skip', 'stop'] : ['start'];
+    list = [
+      ...pomo.map((a) => [a, null, () => window.mate.pomodoro(a)]),
+      ['timer', null, () => setPicking(true)],
+      ...(clock?.timers?.length ? [['cancelTimers', null, () => window.mate.timer('cancel')]] : []),
+    ];
+  }
+  const key = list.map(([a]) => a).join(',') + config?.lang;
+  if (key === clockButtonsKey) return;
+  clockButtonsKey = key;
+  clockButtons.innerHTML = '';
+  for (const [action, text, onClick] of list) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    if (text) {
+      b.textContent = text; // 長さを選ぶボタン（「5分」など）は文字で出す
+      b.className = 'pill';
+    } else {
+      b.innerHTML = icon(action);
+      b.dataset.label = B[action] || '';
+      b.setAttribute('aria-label', B[action] || '');
+    }
+    b.addEventListener('click', onClick);
+    clockButtons.appendChild(b);
+  }
+}
+
+function setPicking(on) {
+  pickingTimer = on;
+  clockEl.classList.toggle('picking', on);
+  renderClock();
+}
+
+// 選んでいる途中で時計からマウスが離れたら、元のボタンに戻す
+clockEl.addEventListener('mouseleave', () => { if (pickingTimer) setPicking(false); });
+
+function setClock(state) {
+  clock = state;
+  renderClock();
+}
+
+window.mate.on('clock-state', setClock);
+// 秒の変わり目に合わせて描く
+(function tick() {
+  renderClock();
+  setTimeout(tick, 1000 - (Date.now() % 1000) + 5);
+}());
 
 // ---------- 配色 ----------
 
@@ -790,6 +940,7 @@ window.mate.on('theme-auto-request', async () => {
   sendBtn.title = ui().send;
   const hasTheme = Object.keys(config.theme || {}).length > 0;
   if (hasTheme) applyTheme(config.theme);
+  setClock(await window.mate.clockState());
   if (config.stt?.enabled) window.mate.sttWarmup();
   else micBtn.classList.add('hidden');
 

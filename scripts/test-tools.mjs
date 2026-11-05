@@ -9,6 +9,7 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const { buildTools, runAgent, replyMessage, customApps } = require('../tools.js');
 const { listApps } = require('../pc-apps.js');
+const { createPomodoro } = require('../pomodoro.js');
 
 const args = process.argv.slice(2);
 const lang = args.includes('--en') ? 'en' : 'ja';
@@ -30,14 +31,18 @@ const fakeMedia = async (action, steps) => { opened.push(`media ${action} x${ste
 // クリップボードの中身は環境変数 CLIP で渡せる（例: CLIP="英語の文章" node scripts/test-tools.mjs "これ訳して"）
 let clip = process.env.CLIP || '';
 const fakeClipboard = { readText: () => clip, writeText: (t) => { clip = t; opened.push(`clipboard <- ${t.slice(0, 80)}${t.length > 80 ? '…' : ''}`); } };
-const fakeTimers = { add: (ms, message) => opened.push(`timer ${Math.round(ms / 1000)}s "${message}"`), cancelAll: () => 0 };
+const fakeTimers = { add: (ms, message) => opened.push(`timer ${Math.round(ms / 1000)}s "${message}"`), cancelAll: () => 0, list: () => [] };
+// ポモドーロは本物（時間が来る前にテストは終わる）。何をしたかだけ記録する
+const realPomodoro = createPomodoro({ settings: config.pomodoro });
+const fakePomodoro = Object.fromEntries(['start', 'pause', 'resume', 'skip', 'stop'].map((a) => [a, (o) => { opened.push(`pomodoro ${a}${o && Object.values(o).some(Boolean) ? ` ${JSON.stringify(o)}` : ''}`); return realPomodoro[a](o); }]));
+fakePomodoro.state = realPomodoro.state;
 const home = os.homedir();
 const folders = {
   downloads: path.join(home, 'Downloads'), documents: path.join(home, 'Documents'), desktop: path.join(home, 'Desktop'),
   pictures: path.join(home, 'Pictures'), music: path.join(home, 'Music'), videos: path.join(home, 'Videos'), home,
 };
 const apps = await listApps({ extra: customApps(config) });
-const ctx = { config, shell: fakeShell, lang, apps, launchApp: fakeLaunch, folders, mediaControl: fakeMedia, timers: fakeTimers, clipboard: fakeClipboard };
+const ctx = { config, shell: fakeShell, lang, apps, launchApp: fakeLaunch, folders, mediaControl: fakeMedia, timers: fakeTimers, pomodoro: fakePomodoro, clipboard: fakeClipboard };
 const tools = buildTools(config, lang, apps);
 
 const prompts = args.filter((a) => !a.startsWith('--')).length ? args.filter((a) => !a.startsWith('--')) : lang === 'en' ? [
@@ -99,3 +104,5 @@ for (const p of prompts) {
     for (const text of show) console.log(`    + bubble: ${text.replace(/\n/g, ' ')}`);
   }
 }
+// ポモドーロのタイマーが残っていると終わらないので止める
+realPomodoro.stop();

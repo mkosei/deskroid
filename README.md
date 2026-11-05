@@ -32,6 +32,7 @@ Chat, speech recognition and text-to-speech all run locally, so there are no clo
 - Ask for the weather forecast, e.g. "what's the weather tomorrow?"
 - Control the volume and playback, e.g. "turn the volume up a little", "pause the music", "next track"
 - Timers and reminders, e.g. "tell me in 3 minutes that my noodles are ready", "wake me up at 7:30" (the character tells you by speech bubble and voice; timers are cleared when the app quits)
+- Clock and pomodoro: a small clock sits next to the character. Say "start a pomodoro" or "50 minutes focus, 10 minutes break" and it repeats focus and breaks, with the character speaking up at each switch. A ring shows the time left, and hovering shows buttons for the pomodoro, a timer (pick 1 minute to 1 hour), pause, skip and stop. It also answers "how long is left on the timer?"
 - Work with text you copied, e.g. "summarize what I copied", "translate this into Japanese", "what does this error mean?" (the clipboard is only read when you ask, and only changed when you say "put it on the clipboard")
 - Several requests at once, and requests that depend on a result, e.g. "open YouTube and turn the volume up", "if it rains tomorrow, remind me at 7 am to take an umbrella"
 - Import your own models (Live2D / 3D) and switch between characters
@@ -160,6 +161,9 @@ Right-click menu:
 | Switch character | Switch to another registered character |
 | Standing pose / Legs | Poses for 3D characters (hands behind back, relaxed, hands on hips, legs crossed, or auto) |
 | Reset conversation | Clear the conversation history |
+| Timer | Set a timer from 1 minute to 1 hour, or cancel all timers |
+| Pomodoro | Start, pause, skip or stop a pomodoro, and choose the focus, break and long break lengths and how often the long break comes |
+| Clock | Show the clock (the pomodoro and timer countdowns show even when this is off), and put it on the right or left of the character |
 | Always on top | Keep the character above other windows |
 | Open when the PC starts | Start Deskroid automatically when you sign in to Windows / macOS |
 | Import model… | Add your own model (see below) |

@@ -10,6 +10,7 @@ const { listApps, launchApp } = require('./pc-apps');
 const { MODEL_FILTERS, importModel, defaultPersona } = require('./model-import');
 const setup = require('./setup');
 const { strings } = require('./i18n');
+const { createPomodoro } = require('./pomodoro');
 
 const IS_MAC = process.platform === 'darwin';
 
@@ -63,7 +64,7 @@ migrateOldData();
 const DATA_DIR = app.isPackaged ? app.getPath('userData') : __dirname;
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const LOCAL_CONFIG_PATH = path.join(DATA_DIR, 'config.local.json');
-const MERGED_KEYS = ['voice', 'stt', 'hotkeys', 'apps', 'weather'];
+const MERGED_KEYS = ['voice', 'stt', 'hotkeys', 'apps', 'weather', 'clock', 'pomodoro'];
 const DEFAULT_HOTKEYS = {
   listenOnce: IS_MAC ? 'Alt+Space' : 'Control+Space',
   voiceChat: 'CommandOrControl+Alt+V',
@@ -298,6 +299,65 @@ async function switchSpeechModel(id) {
   if (config.stt?.enabled) loadAsr().catch(() => {});
 }
 
+// 右クリックメニューの「ポモドーロ」。動いているかどうかで出す項目を変える
+function pomodoroMenu(T) {
+  const P = T.pomodoro;
+  const s = pomodoro.state();
+  const p = { ...config.pomodoro };
+  const menu = {
+    label: s.running ? `${P.menu}（${P.phases[s.phase]}${s.paused ? ` · ${P.paused}` : ''}）` : P.menu,
+    submenu: s.running ? [
+      s.paused
+        ? { label: P.resume, click: () => pomodoroAction('resume') }
+        : { label: P.pause, click: () => pomodoroAction('pause') },
+      { label: s.phase === 'focus' ? P.skipToBreak : P.skipToFocus, click: () => pomodoroAction('skip') },
+      { label: P.stop, click: () => pomodoroAction('stop') },
+    ] : [
+      { label: P.start(p.focus, p.shortBreak), click: () => pomodoroAction('start') },
+    ],
+  };
+  const choices = (key, label, values, fmt) => ({
+    label,
+    submenu: values.map((v) => ({
+      label: fmt(v),
+      type: 'radio',
+      checked: Number(p[key]) === v,
+      click: () => setPomodoroSetting(key, v),
+    })),
+  });
+  menu.submenu.push(
+    { type: 'separator' },
+    choices('focus', P.focusLength, [15, 20, 25, 30, 45, 50, 60, 90], P.minutes),
+    choices('shortBreak', P.breakLength, [3, 5, 10, 15], P.minutes),
+    choices('longBreak', P.longBreakLength, [10, 15, 20, 30], P.minutes),
+    choices('longEvery', P.longEvery, [2, 3, 4, 5, 6], P.times),
+  );
+  return menu;
+}
+
+// ポモドーロの時間を変えて、この PC の設定に残す（動いている途中なら次の区切りから）
+function setPomodoroSetting(key, value) {
+  const next = { ...readLocalConfig().pomodoro, [key]: value };
+  writeLocalConfig({ pomodoro: next });
+  config.pomodoro = { ...config.pomodoro, [key]: value };
+  pomodoro.setSettings(config.pomodoro);
+  sendClockState();
+}
+
+// 右クリックメニューの「タイマー」。決まった長さから選んでセットする
+const QUICK_TIMERS = [1, 3, 5, 10, 15, 30, 60];
+function timerMenu(T) {
+  const n = timerApi.list().length;
+  return {
+    label: n ? T.timer.menuRunning(n) : T.timer.menu,
+    submenu: [
+      ...QUICK_TIMERS.map((m) => ({ label: T.timer.length(m), click: () => quickTimer(m) })),
+      { type: 'separator' },
+      { label: T.timer.cancel, enabled: n > 0, click: () => cancelQuickTimers() },
+    ],
+  };
+}
+
 ipcMain.on('show-menu', async (event, extra) => {
   const chatModels = await ollamaModels();
   const T = strings(config.lang);
@@ -332,6 +392,26 @@ ipcMain.on('show-menu', async (event, extra) => {
       })),
     }] : []),
     { label: T.resetChat, click: () => event.sender.send('reset-chat') },
+    timerMenu(T),
+    pomodoroMenu(T),
+    {
+      label: T.clock.menu,
+      submenu: [
+        {
+          label: T.clock.show,
+          type: 'checkbox',
+          checked: config.clock?.show !== false,
+          click: (item) => setClockSetting('show', item.checked),
+        },
+        { type: 'separator' },
+        ...[['right', T.clock.right], ['left', T.clock.left]].map(([side, label]) => ({
+          label,
+          type: 'radio',
+          checked: (config.clock?.side || 'right') === side,
+          click: () => setClockSetting('side', side),
+        })),
+      ],
+    },
     {
       label: T.alwaysOnTop,
       type: 'checkbox',
@@ -445,51 +525,155 @@ async function toolContext() {
 }
 
 // タイマー・リマインダー（アプリを終了すると消える）。時間になったらキャラが吹き出しと声で知らせる
-const timers = new Set();
+// 鳴る時刻とメモも持っておき、時計の表示（残り時間）に使う
+const timers = new Map(); // setTimeout の戻り値 → { due, message }
 
-// セットしたときのメモ（「薬飲むのを教えて」など）を、キャラの言葉で短く言い直す。失敗したらメモのまま
-async function timerLine(message) {
-  const note = config.lang === 'en'
-    ? `(System note: a timer the user asked you to set has just gone off. The note for it is "${message}". Tell the user about it in one short sentence, in character, without changing its meaning. Examples: note "tell me to take in the laundry" → "Time to take in the laundry!"; note "the tea is ready" → "Your tea is ready!". Do not add any [tag].)`
-    : `（システムより：ユーザーに頼まれていたタイマーの時間になりました。メモ:「${message}」。キャラとして、メモの意味を変えずに、一言で短く伝えてください。例: メモ「洗濯物取り込むの教えて」→「洗濯物を取り込む時間だよ」、メモ「お茶が入ったよ」→「お茶が入ったよ」。[タグ] は付けないでください）`;
+// システムからの知らせ（タイマー・ポモドーロの区切り）を、キャラの言葉で一言にする。失敗したら fallback のまま
+async function characterLine(note, fallback) {
   try {
     const { content } = await streamOllama([
       { role: 'system', content: config.persona },
       { role: 'user', content: note },
     ], [], () => {});
-    return content.replace(/\[[a-z]+\]\s*/gi, '').trim() || message;
+    return content.replace(/\[[a-z]+\]\s*/gi, '').trim() || fallback;
   } catch {
-    return message;
+    return fallback;
   }
 }
+
+// セットしたときのメモ（「薬飲むのを教えて」など）を、キャラの言葉で短く言い直す
+function timerLine(message) {
+  const note = config.lang === 'en'
+    ? `(System note: a timer the user asked you to set has just gone off. The note for it is "${message}". Tell the user about it in one short sentence, in character, without changing its meaning. Examples: note "tell me to take in the laundry" → "Time to take in the laundry!"; note "the tea is ready" → "Your tea is ready!". Do not add any [tag].)`
+    : `（システムより：ユーザーに頼まれていたタイマーの時間になりました。メモ:「${message}」。キャラとして、メモの意味を変えずに、一言で短く伝えてください。例: メモ「洗濯物取り込むの教えて」→「洗濯物を取り込む時間だよ」、メモ「お茶が入ったよ」→「お茶が入ったよ」。[タグ] は付けないでください）`;
+  return characterLine(note, message);
+}
+
+// キャラに吹き出しと声で知らせる。隠れていたら出す。notify なら Windows / Mac の通知も出す
+function announce(message, { icon = '⏰', notify = true } = {}) {
+  // show() は「常に最前面」を外してしまうことがあるので、出したあとに付け直す
+  if (win) {
+    const onTop = win.isAlwaysOnTop();
+    if (!win.isVisible()) win.showInactive();
+    if (onTop) win.setAlwaysOnTop(true, 'floating');
+  }
+  win?.webContents.send('timer-fired', { message, icon });
+  if (notify && Notification.isSupported()) new Notification({ title: config.characterName, body: message, icon: APP_ICON }).show();
+}
+
+// 時計の表示に渡すもの：時計を出すか、ポモドーロの状態、セット中のタイマー（早い順）
+function clockState() {
+  return {
+    show: config.clock?.show !== false,
+    side: config.clock?.side === 'left' ? 'left' : 'right',
+    lang: config.lang,
+    pomodoro: pomodoro.state(),
+    timers: [...timers.values()].sort((a, b) => a.due - b.due),
+  };
+}
+
+// 時計の設定（出すか・左右どちらに出すか）を変えて、この PC の設定に残す
+function setClockSetting(key, value) {
+  writeLocalConfig({ clock: { ...readLocalConfig().clock, [key]: value } });
+  config.clock = { ...config.clock, [key]: value };
+  sendClockState();
+}
+
+function sendClockState() {
+  win?.webContents.send('clock-state', clockState());
+}
+
+ipcMain.handle('clock-state', () => clockState());
 
 const timerApi = {
   add(ms, message) {
     const t = setTimeout(async () => {
       timers.delete(t);
-      const line = await timerLine(message);
-      // 隠れていたときだけ出す。show() は「常に最前面」を外してしまうことがあるので、出したあとに付け直す
-      if (win) {
-        const onTop = win.isAlwaysOnTop();
-        if (!win.isVisible()) win.showInactive();
-        if (onTop) win.setAlwaysOnTop(true, 'floating');
-      }
-      win?.webContents.send('timer-fired', { message: line });
-      if (Notification.isSupported()) new Notification({ title: config.characterName, body: line, icon: APP_ICON }).show();
+      sendClockState();
+      announce(await timerLine(message));
     }, ms);
-    timers.add(t);
+    timers.set(t, { due: Date.now() + ms, total: ms, message });
+    sendClockState();
   },
   cancelAll() {
     const n = timers.size;
-    for (const t of timers) clearTimeout(t);
+    for (const t of timers.keys()) clearTimeout(t);
     timers.clear();
+    sendClockState();
     return n;
+  },
+  list() {
+    return [...timers.values()].sort((a, b) => a.due - b.due);
   },
 };
 
+// ---------- ポモドーロ ----------
+// 区切りが来たら、キャラが「休憩しよう」「次いこう」と声をかける
+
+// 区切りごとの声かけ。AI に言い直させ、失敗したら決まった文にする
+function pomodoroLine(kind, { minutes, done } = {}) {
+  const P = strings(config.lang).pomodoro;
+  const fallback = P.lines[kind](minutes, done);
+  const en = config.lang === 'en';
+  const what = {
+    start: en ? `The user is starting a ${minutes}-minute focus session (pomodoro). Cheer them on.` : `ユーザーがポモドーロで ${minutes} 分の集中を始めます。応援してください。`,
+    short: en ? `The user just finished a focus session (${done} so far). It is time for a ${minutes}-minute break. Praise them and suggest resting.` : `ユーザーが集中を 1 回終えました（今日 ${done} 回目）。${minutes} 分の休憩です。ねぎらって、休むように勧めてください。`,
+    long: en ? `The user finished ${done} focus sessions. It is time for a longer ${minutes}-minute break. Praise them warmly.` : `ユーザーが集中を ${done} 回やりとげました。${minutes} 分の長めの休憩です。しっかりねぎらってください。`,
+    focus: en ? `The break is over. The next ${minutes}-minute focus session starts now. Encourage them gently.` : `休憩が終わりました。次の ${minutes} 分の集中が今から始まります。やさしく声をかけてください。`,
+    stop: en ? 'The user stopped the pomodoro.' : 'ユーザーがポモドーロを終わりにしました。',
+  }[kind];
+  const note = en
+    ? `(System note: ${what} Say it in one short sentence, in character. Do not add any [tag].)`
+    : `（システムより：${what}キャラとして、一言で短く言ってください。[タグ] は付けないでください）`;
+  return characterLine(note, fallback);
+}
+
+const pomodoro = createPomodoro({
+  onChange: () => sendClockState(),
+  onPhaseEnd: async ({ next, done, minutes }) => {
+    announce(await pomodoroLine(next, { minutes, done }), { icon: next === 'focus' ? '🍅' : '☕' });
+  },
+});
+
+// メニュー・時計のボタンから操作したとき（声で頼んだときはキャラの返事で伝えるので、ここは通らない）
+// 時計のボタン・メニューからセットするタイマー。セットしたことを一言だけ伝える
+function quickTimer(minutes) {
+  const m = Number(minutes);
+  if (!(m > 0 && m <= 24 * 60)) return;
+  const T = strings(config.lang).timer;
+  timerApi.add(m * 60000, T.message(m));
+  announce(T.set(m), { icon: '⏱', notify: false });
+}
+
+function cancelQuickTimers() {
+  if (timerApi.cancelAll()) announce(strings(config.lang).timer.cancelled, { icon: '⏱', notify: false });
+}
+
+ipcMain.on('timer', (_e, { action, minutes } = {}) => {
+  if (action === 'start') quickTimer(minutes);
+  else if (action === 'cancel') cancelQuickTimers();
+});
+
+async function pomodoroAction(action) {
+  if (action === 'start') {
+    pomodoro.setSettings(config.pomodoro);
+    const s = pomodoro.start();
+    announce(await pomodoroLine('start', { minutes: Math.round(s.total / 60000) }), { icon: '🍅', notify: false });
+  } else if (action === 'stop') {
+    if (pomodoro.stop()) announce(await pomodoroLine('stop'), { icon: '🍅', notify: false });
+  } else if (action === 'toggle') {
+    if (!pomodoro.pause()) pomodoro.resume();
+  } else if (typeof pomodoro[action] === 'function') {
+    pomodoro[action]();
+  }
+}
+
+ipcMain.on('pomodoro', (_e, action) => { pomodoroAction(action); });
+
 // ①判定役がツールを選んで実行し、結果を見てまた考える（エージェントループ）→ ②キャラとして結果を踏まえて返事
 async function runTools(messages) {
-  const ctx = { ...(await toolContext()), mediaControl, timers: timerApi, clipboard };
+  const pomodoroApi = { ...pomodoro, start: (o) => { pomodoro.setSettings(config.pomodoro); return pomodoro.start(o); } };
+  const ctx = { ...(await toolContext()), mediaControl, timers: timerApi, pomodoro: pomodoroApi, clipboard };
   const tools = buildTools(config, config.lang, ctx.apps);
   if (!tools.length) return { results: [], show: [] };
   const history = messages.filter((m) => m.role !== 'system').slice(-4);

@@ -67,6 +67,8 @@
       "decoder_model_merged": "q4"
     }
   },
+  "clock": { "show": true },
+  "pomodoro": { "focus": 25, "shortBreak": 5, "longBreak": 15, "longEvery": 4 },
   "characters": {
     "vita": {
       "characterName": "ヴィータ",
