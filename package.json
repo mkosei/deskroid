@@ -1,7 +1,7 @@
 {
   "name": "deskroid",
   "productName": "Deskroid",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "デスクトップに常駐して話せるキャラクター（Live2D / 3D・Ollama・VOICEVOX / Kokoro・Whisper）",
   "author": "mkosei",
   "homepage": "https://github.com/mkosei/deskroid",
