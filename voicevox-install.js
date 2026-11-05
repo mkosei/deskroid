@@ -4,8 +4,9 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const { latestRelease, ensureFreeSpace, download, verifyDigest } = require('./download');
 
-const RELEASES_API = 'https://api.github.com/repos/VOICEVOX/voicevox_engine/releases/latest';
+const RELEASES_REPO = 'VOICEVOX/voicevox_engine';
 // GitHub の API に届かなかったときに使う版
 const FALLBACK_VERSION = '0.26.0';
 
@@ -95,65 +96,56 @@ function stopOtherEngines(root, keepExe) {
   });
 }
 
-// 最新版の配布物（名前・URL・大きさ）。API に届かなければ決めておいた版にする
+// リリースの中から、この PC 用の配布物を探す。
+// GitHub に置ける 1 ファイルの大きさに上限があるので、大きいものは
+// "〜.001.vvppp"・"〜.002.vvppp" のように分けて置かれる（つなげると .vvpp になる）
+function findParts(assets, name) {
+  const pick = (a) => ({ name: a.name, url: a.browser_download_url, size: a.size, digest: a.digest });
+  const whole = assets.find((a) => a.name === name);
+  if (whole) return [pick(whole)];
+  const base = name.replace(/\.vvpp$/, '');
+  return assets
+    .filter((a) => a.name.startsWith(`${base}.`) && /^\.\d{3}\.vvppp$/.test(a.name.slice(base.length)))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(pick);
+}
+
+// 最新版の配布物（名前・分かれたファイルの URL と大きさ・全体の大きさ）。API に届かなければ決めておいた版にする
 async function latestAsset() {
-  try {
-    const res = await fetch(RELEASES_API, {
-      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Deskroid' },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (res.ok) {
-      const rel = await res.json();
-      const name = assetName(rel.tag_name);
-      const asset = rel.assets?.find((a) => a.name === name);
-      if (asset) return { version: rel.tag_name, name, url: asset.browser_download_url, size: asset.size };
-    }
-  } catch {}
+  const rel = await latestRelease(RELEASES_REPO);
+  if (rel) {
+    const name = assetName(rel.tag_name);
+    const parts = findParts(rel.assets || [], name);
+    if (parts.length) return { version: rel.tag_name, name, parts, size: parts.reduce((n, p) => n + p.size, 0) };
+  }
   const name = assetName(FALLBACK_VERSION);
-  return { version: FALLBACK_VERSION, name, url: `https://github.com/VOICEVOX/voicevox_engine/releases/download/${FALLBACK_VERSION}/${name}`, size: 0 };
+  const url = `https://github.com/VOICEVOX/voicevox_engine/releases/download/${FALLBACK_VERSION}/${name}`;
+  return { version: FALLBACK_VERSION, name, parts: [{ name, url, size: 0 }], size: 0 };
 }
 
-// 空き容量（バイト）。調べられなければ null
-async function freeSpace(dir) {
-  try {
-    fs.mkdirSync(dir, { recursive: true });
-    const s = await fs.promises.statfs(dir);
-    return s.bavail * s.bsize;
-  } catch {
-    return null;
+// 分かれたファイルを順に落として、1 つの .vvpp につなげる。全体で何バイト進んだかを知らせる
+async function downloadParts(root, asset, onProgress, en) {
+  const files = [];
+  let done = 0;
+  for (const part of asset.parts) {
+    const file = path.join(root, `${part.name}.part`);
+    await download(part.url, file, part.size, (p) => onProgress({ ...p, received: done + p.received, total: asset.size || p.total }));
+    await verifyDigest(file, part.digest, en);
+    done += part.size || fs.statSync(file).size;
+    files.push(file);
   }
-}
-
-// 途中まで落としたファイルがあれば、続きから落とす（1.9GB あるので、失敗のたびに最初からにしない）
-async function download(url, file, size, onProgress) {
-  let have = fs.existsSync(file) ? fs.statSync(file).size : 0;
-  if (size && have === size) return;
-  if (size && have > size) { fs.rmSync(file); have = 0; }
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'Deskroid', ...(have ? { Range: `bytes=${have}-` } : {}) },
-  });
-  if (!res.ok) throw new Error(`download ${res.status}`);
-  // 続きからを受け付けなかった（200 で全部返ってきた）ときは最初から書き直す
-  if (have && res.status !== 206) have = 0;
-  const total = size || (Number(res.headers.get('content-length')) || 0) + have;
-  const out = fs.createWriteStream(file, { flags: have ? 'a' : 'w' });
-  let received = have;
-  let last = 0;
-  try {
-    for await (const chunk of res.body) {
-      if (!out.write(chunk)) await new Promise((r) => out.once('drain', r));
-      received += chunk.length;
-      const now = Date.now();
-      if (now - last > 250) {
-        last = now;
-        onProgress({ phase: 'download', received, total });
-      }
-    }
-  } finally {
-    await new Promise((r) => out.end(r));
+  if (files.length === 1) return files[0];
+  // 1 つ目に残りを足していく（足し終えたものから消すので、余分な空きは要らない）
+  const joined = path.join(root, `${asset.name}.part`);
+  fs.renameSync(files[0], joined);
+  for (const file of files.slice(1)) {
+    await new Promise((resolve, reject) => {
+      const out = fs.createWriteStream(joined, { flags: 'a' });
+      fs.createReadStream(file).on('error', reject).pipe(out).on('error', reject).on('finish', resolve);
+    });
+    fs.rmSync(file, { force: true });
   }
-  if (total && received !== total) throw new Error(`download incomplete (${received} / ${total})`);
-  onProgress({ phase: 'download', received, total });
+  return joined;
 }
 
 // zip（.vvpp）を展開する。Windows 10 以降・Mac に最初から入っている bsdtar を使う
@@ -188,17 +180,9 @@ async function installEngine(root, onProgress = () => {}, { en = false } = {}) {
   if (fs.existsSync(already)) return already;
 
   // 落としたファイル（約 1.9GB）と展開したもの（約 2.2GB）が同時に置かれる
-  const need = (asset.size || 1.95e9) * 2.3;
-  const free = await freeSpace(root);
-  if (free !== null && free < need) {
-    const gb = (n) => (n / 1e9).toFixed(1);
-    throw new Error(en
-      ? `Not enough free disk space (needs about ${gb(need)} GB, ${gb(free)} GB free).`
-      : `ディスクの空きが足りません（約 ${gb(need)}GB 必要で、空きは ${gb(free)}GB です）。`);
-  }
+  await ensureFreeSpace(root, (asset.size || 1.95e9) * 2.3, en);
 
-  const file = path.join(root, `${asset.name}.part`);
-  await download(asset.url, file, asset.size, onProgress);
+  const file = await downloadParts(root, asset, onProgress, en);
 
   onProgress({ phase: 'extract' });
   const tmp = path.join(root, `${asset.version}.extracting`);
@@ -221,4 +205,4 @@ async function installEngine(root, onProgress = () => {}, { en = false } = {}) {
   return path.join(target, exeName());
 }
 
-module.exports = { installEngine, findInstalledEngine, installedVersions, checkEngineUpdate, removeOldVersions, stopOtherEngines, compareVersions, assetName, latestAsset };
+module.exports = { installEngine, findInstalledEngine, installedVersions, checkEngineUpdate, removeOldVersions, stopOtherEngines, compareVersions, assetName, latestAsset, findParts };

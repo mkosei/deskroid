@@ -3,7 +3,12 @@
 const { shell, systemPreferences } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
+const os = require('os');
 const fs = require('fs');
+const { systemInfo, recommend, CHAT_MODELS } = require('./system-info');
+const { installOllama, latestOllama } = require('./ollama-install');
+const { latestAsset: latestVoicevox } = require('./voicevox-install');
+const { freeSpace } = require('./download');
 
 const OLLAMA_SITE = 'https://ollama.com/';
 const OLLAMA_DOWNLOAD = 'https://ollama.com/download';
@@ -25,10 +30,25 @@ async function ollamaReachable(url) {
   }
 }
 
+// 配布物の大きさなどは GitHub に聞くので、1 時間はおぼえておく（セットアップ画面は何度も確認し直すため）
+function cachedFor(ms, fn) {
+  let at = 0;
+  let value = null;
+  return async () => {
+    if (!value || Date.now() - at > ms) {
+      value = await fn().catch(() => null);
+      at = Date.now();
+    }
+    return value;
+  };
+}
+const ollamaAsset = cachedFor(60 * 60 * 1000, latestOllama);
+const voicevoxAsset = cachedFor(60 * 60 * 1000, latestVoicevox);
+
 // Ollama 本体の場所（起動していないときに起動するため）
 function findOllama(isMac) {
   const candidates = isMac
-    ? ['/Applications/Ollama.app', '/opt/homebrew/bin/ollama', '/usr/local/bin/ollama']
+    ? ['/Applications/Ollama.app', path.join(os.homedir(), 'Applications', 'Ollama.app'), '/opt/homebrew/bin/ollama', '/usr/local/bin/ollama']
     : [path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Ollama', 'ollama.exe')];
   return candidates.find((p) => fs.existsSync(p)) || null;
 }
@@ -43,6 +63,21 @@ async function checkAll(ctx) {
   const { config, isMac } = ctx;
   const result = { lang: ctx.lang }; // 画面の言語（文言は画面側で作る）
 
+  // この PC の性能と、おすすめの会話モデル
+  const info = await systemInfo();
+  const rec = recommend(info);
+  const free = await freeSpace(os.homedir());
+  result.pc = {
+    ram: info.ram,
+    cpu: info.cpu,
+    gpu: info.gpu,
+    unified: info.unified,
+    level: rec.level,
+    recommended: rec.recommended,
+    models: rec.models.map(({ name, size, fit }) => ({ name, size, fit })),
+    free: free === null ? null : free / 1e9,
+  };
+
   // Ollama と会話モデル
   let version = null;
   try {
@@ -55,6 +90,7 @@ async function checkAll(ctx) {
       result.model = hasModel(models, config.ollamaModel)
         ? { state: 'ok', detail: config.ollamaModel }
         : { state: 'missing', detail: config.ollamaModel };
+      result.model.installed = models.map((m) => m.name);
     } catch {
       result.model = { state: 'unknown', detail: config.ollamaModel };
     }
@@ -62,6 +98,11 @@ async function checkAll(ctx) {
     result.ollama = findOllama(isMac) ? { state: 'stopped' } : { state: 'missing' };
     result.model = { state: 'waiting', detail: config.ollamaModel };
   }
+  // 入れるときに落とす大きさ（GB）
+  if (result.ollama.state === 'missing') result.ollama.size = ((await ollamaAsset())?.size || 0) / 1e9 || null;
+  // 自分で選んだモデルがあればそれ、なければこの PC へのおすすめを入れる
+  result.model.choice = ctx.chosenModel || ctx.userModel || rec.recommended;
+  result.model.fit = rec.models.find((m) => m.name === config.ollamaModel)?.fit || null;
 
   // 声（任意）。日本語は VOICEVOX、英語は Kokoro（アプリの中で動くので、初回にダウンロードするだけ）
   if (ctx.lang === 'en') {
@@ -69,7 +110,7 @@ async function checkAll(ctx) {
   } else {
     if (await ctx.voicevoxReady()) result.voicevox = { state: 'ok' };
     else if (ctx.findVoicevoxEngine()) result.voicevox = { state: 'stopped' };
-    else result.voicevox = { state: 'missing' };
+    else result.voicevox = { state: 'missing', size: ((await voicevoxAsset())?.size || 0) / 1e9 || null };
     result.voicevox.optional = true;
     const update = ctx.voicevoxUpdate?.();
     if (update && result.voicevox.state !== 'missing') result.voicevox.update = update;
@@ -91,11 +132,11 @@ async function checkAll(ctx) {
 }
 
 // 会話モデルのダウンロード（Ollama の /api/pull を流しながら進み具合を知らせる）
-async function pullModel(config, onProgress) {
+async function pullModel(config, model, onProgress) {
   const res = await fetch(`${config.ollamaUrl}/api/pull`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: config.ollamaModel, stream: true }),
+    body: JSON.stringify({ model, stream: true }),
   });
   if (!res.ok) throw new Error(`Ollama ${res.status}: ${await res.text()}`);
   const decoder = new TextDecoder();
@@ -114,7 +155,16 @@ async function pullModel(config, onProgress) {
   }
 }
 
-async function startOllama(isMac, en) {
+async function waitOllama(url, seconds) {
+  for (let i = 0; i < seconds; i++) {
+    if (await ollamaReachable(url)) return true;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  return false;
+}
+
+async function startOllama(isMac, en, url = 'http://localhost:11434') {
+  if (await ollamaReachable(url)) return;
   const found = findOllama(isMac);
   if (!found) throw new Error(en ? "Couldn't find Ollama. Please install it first." : 'Ollama が見つかりません。先にインストールしてください。');
   if (isMac && found.endsWith('.app')) {
@@ -122,17 +172,11 @@ async function startOllama(isMac, en) {
   } else {
     spawn(found, ['serve'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
   }
-  for (let i = 0; i < 30; i++) {
-    await new Promise((r) => setTimeout(r, 1000));
-    try {
-      await getJson(`http://localhost:11434/api/version`, 1000);
-      return;
-    } catch {}
-  }
+  if (await waitOllama(url, 30)) return;
   throw new Error(en ? "Couldn't start Ollama. Please try starting it yourself." : 'Ollama を起動できませんでした。手動で起動してみてください。');
 }
 
-async function runAction(name, ctx, onProgress) {
+async function runAction(name, ctx, onProgress, arg) {
   const { config, isMac } = ctx;
   const en = ctx.lang === 'en';
   switch (name) {
@@ -141,9 +185,23 @@ async function runAction(name, ctx, onProgress) {
     case 'openOllamaDownload':
       return shell.openExternal(OLLAMA_DOWNLOAD);
     case 'startOllama':
-      return startOllama(isMac, en);
-    case 'pullModel':
-      return pullModel(config, onProgress);
+      return startOllama(isMac, en, config.ollamaUrl);
+    case 'installOllama':
+      await installOllama(ctx.downloadDir, (p) => onProgress({ item: 'ollama', ...p }), { en });
+      // 入れた直後は Ollama が自分で起動することがあるので、少し待ってから起動する
+      if (!(await waitOllama(config.ollamaUrl, 8))) await startOllama(isMac, en, config.ollamaUrl);
+      return true;
+    case 'selectModel':
+      // 落とすモデルを選んだだけ（まだ落とさない）
+      if (CHAT_MODELS.some((m) => m.name === arg)) ctx.setChosenModel(arg);
+      return true;
+    case 'pullModel': {
+      const model = CHAT_MODELS.some((m) => m.name === arg) ? arg : config.ollamaModel;
+      await pullModel(config, model, onProgress);
+      // 落としたモデルで話すようにする
+      if (model !== config.ollamaModel) ctx.setChatModel(model);
+      return true;
+    }
     case 'openVoicevoxDownload':
     case 'openVoicevoxSite':
       return shell.openExternal(VOICEVOX_SITE);

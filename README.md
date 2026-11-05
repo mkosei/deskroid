@@ -57,10 +57,10 @@ They are licensed separately from the app's MIT license. See [assets/avatars/LIC
 ## Requirements
 
 - Windows 10 / 11, or macOS (Apple silicon or Intel)
-- [Ollama](https://ollama.com/) and a chat model (the first-run setup screen can set this up for you)
+- [Ollama](https://ollama.com/) and a chat model ("Install Ollama" or "Set up everything" in the first-run setup screen installs them from the official source)
 - For speaking in English, nothing else is needed: the Kokoro voice model (about 90 MB) is downloaded automatically the first time
-- [VOICEVOX](https://voicevox.hiroshiba.jp/) (only for speaking in Japanese; press "Install voices" in the setup screen and the app downloads the engine from the official source, about 1.9 GB. If you already have the VOICEVOX app, that is used instead)
-- A GPU with 8 GB+ VRAM, or an Apple silicon Mac, is recommended for running the chat model smoothly
+- [VOICEVOX](https://voicevox.hiroshiba.jp/) (only for speaking in Japanese; press "Install voices" in the setup screen and the app downloads the engine from the official source, about 2 GB. If you already have the VOICEVOX app, that is used instead)
+- 8 GB of memory or more. 16 GB of memory, a GPU (NVIDIA or AMD) with 6 GB+ VRAM, or an Apple silicon Mac makes it comfortable. The setup screen checks this PC and tells you which chat model fits it
 
 ## Installation
 
@@ -94,16 +94,18 @@ Shortly after startup, and once a day after that, the app checks for a new versi
 
 - **Windows**: the new version is downloaded in the background and installed when you quit the app. To update right away, right-click → "Restart to update Deskroid"
 - **Mac**: the character tells you when a new version is out. Right-click → "Download the new Deskroid" and install it again (the app is not signed, so it can't replace itself)
-- **VOICEVOX**: if the engine installed with "Install voices" has a new version, it shows up in the right-click menu and the setup screen. "Update" replaces it (about 1.9 GB)
+- **VOICEVOX**: if the engine installed with "Install voices" has a new version, it shows up in the right-click menu and the setup screen. "Update" replaces it (about 2 GB)
 
 ### First-run setup
 
 On first launch, a setup screen checks that everything you need is in place. Anything missing can be set up with the buttons on that screen.
+When two or more things are missing, "Set up everything" sets them all up in order (uncheck anything you don't need, such as voices or speech recognition).
 
 | Item | What it does |
 |---|---|
-| Ollama | Opens the download page if it isn't installed, or starts it if it's installed but not running |
-| Chat model | Downloads it with a progress bar if missing (`qwen3:8b` is about 5 GB) |
+| This PC | Checks memory, GPU and free disk space, and shows whether the chat AI will run comfortably and which model is recommended |
+| Ollama | If it isn't installed, "Install Ollama" downloads it from the official source and installs it (about 1.7 GB on Windows, about 0.2 GB on Mac). Starts it if it's installed but not running |
+| Chat model | If missing, choose a model that fits this PC (`qwen3:8b` about 5.2 GB / `qwen3:4b` about 2.5 GB / `qwen3:1.7b` about 1.4 GB / `qwen3:0.6b` about 0.5 GB) and download it. If the installed model looks too heavy for this PC, you can switch to a lighter one |
 | English voice (Kokoro, optional) | Shown in English mode. Downloaded automatically the first time the character speaks (about 90 MB), or press "Prepare now" |
 | VOICEVOX (optional) | Shown in Japanese mode. Used for speaking Japanese. If it isn't installed, "Install voices" downloads the engine with all of its voices |
 | Microphone | On Mac, grant microphone access here |
@@ -180,7 +182,7 @@ Right-click menu:
 | Color settings… | Change the colors of the speech bubble and input box. Pick background, text, accent and name tag colors and see them applied right away. Can also generate colors automatically from the character's look |
 | Hotkey settings… | Change the hotkeys. Click "Change", press the key combination you want, and save — it takes effect immediately. You can also disable a hotkey |
 | Setup | Reopen the setup screen |
-| AI models | **Chat**: pick from the models installed in Ollama (used from the next reply). To use a lighter one, install it first, e.g. `ollama pull qwen3:4b` (about 2.5GB) or `ollama pull qwen3:1.7b` (about 1.4GB; weaker at choosing tools). **Speech recognition**: Accurate (about 1.9GB of memory) or Light (about 0.7GB, more mishearing). Choose Light if speech recognition fails to load because the PC is low on memory |
+| AI models | **Chat**: pick from the models installed in Ollama (used from the next reply). To use a lighter one, choose it under "Chat model" in the setup screen, or install it first, e.g. `ollama pull qwen3:4b` (about 2.5GB). **Speech recognition**: Accurate (about 1.9GB of memory) or Light (about 0.7GB, more mishearing). Choose Light if speech recognition fails to load because the PC is low on memory |
 | Language / 言語 | Auto (match the OS), 日本語 or English. The windows reload in the new language |
 | Reload settings | Apply changes made to the settings files |
 

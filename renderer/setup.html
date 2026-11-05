@@ -43,7 +43,7 @@
     .lead { margin: 0 0 20px; color: var(--sub); }
     .item {
       display: grid;
-      grid-template-columns: 22px 1fr;
+      grid-template-columns: 22px minmax(0, 1fr);
       gap: 4px 12px;
       margin-bottom: 12px;
       padding: 14px 16px;
@@ -72,7 +72,24 @@
       font-weight: 400;
     }
     .desc { grid-column: 2; color: var(--sub); }
+    .desc { white-space: pre-line; }
     .desc .note { display: block; margin-top: 4px; font-size: 11.5px; opacity: 0.85; }
+    .desc .note.warn { color: var(--warn); opacity: 1; }
+    .item.all { display: block; border-color: var(--accent); }
+    .item.all[hidden] { display: none; }
+    .item.all .desc { margin-top: 2px; }
+    .steps { display: flex; flex-direction: column; gap: 2px; margin: 8px 0 6px; }
+    .steps label { display: flex; align-items: center; gap: 8px; }
+    .steps .now { font-weight: 700; color: var(--accent); }
+    select {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--card);
+      color: var(--text);
+      font: inherit;
+    }
     .actions { grid-column: 2; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
     .actions:empty { display: none; }
     button {
@@ -119,6 +136,7 @@
   <p class="lead" id="lead">キャラと話すために必要なものを確認します。足りないものはボタンから準備できます。</p>
 
   <div id="items"></div>
+  <div id="all" class="item all" hidden></div>
 
   <footer>
     <span class="note" id="note"></span>

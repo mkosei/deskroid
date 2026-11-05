@@ -34,6 +34,10 @@ const MODEL_CACHE_DIR = process.env.LOCALAPPDATA
 const VOICEVOX_DIR = process.env.LOCALAPPDATA
   ? path.join(process.env.LOCALAPPDATA, APP_NAME, 'voicevox-engine')
   : path.join(app.getPath('userData'), 'voicevox-engine');
+// セットアップのボタンで落とすインストーラー（Ollama など）を一時的に置く場所
+const DOWNLOAD_DIR = process.env.LOCALAPPDATA
+  ? path.join(process.env.LOCALAPPDATA, APP_NAME, 'downloads')
+  : path.join(app.getPath('userData'), 'downloads');
 
 function migrateOldData() {
   const userData = app.getPath('userData');
@@ -1198,12 +1202,18 @@ ipcMain.handle('hotkeys:save', (_e, hotkeys) => {
 // ---------- 初回セットアップ ----------
 
 let setupWin = null;
+let setupChosenModel = null; // セットアップ画面で選んだ会話モデル（落とすまでは設定に書かない）
 
 function setupContext() {
   return {
     config,
     lang: config.lang,
     isMac: IS_MAC,
+    downloadDir: DOWNLOAD_DIR,
+    chosenModel: setupChosenModel,
+    userModel: readLocalConfig().ollamaModel || null, // 自分で選んだことのあるモデル
+    setChosenModel: (name) => { setupChosenModel = name; },
+    setChatModel: (name) => switchChatModel(name),
     findVoicevoxEngine,
     voicevoxReady,
     // 声なしのキャラや英語モードでも、確認のために起動はできるように
@@ -1249,9 +1259,9 @@ function openSetupWindow() {
 }
 
 ipcMain.handle('setup:check', () => setup.checkAll(setupContext()));
-ipcMain.handle('setup:action', (event, name) => setup.runAction(name, setupContext(), (p) => {
+ipcMain.handle('setup:action', (event, name, arg) => setup.runAction(name, setupContext(), (p) => {
   if (!event.sender.isDestroyed()) event.sender.send('setup:progress', p);
-}));
+}, arg));
 ipcMain.handle('setup:done', () => {
   writeLocalConfig({ setupDone: true });
   setupWin?.close();
