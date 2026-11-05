@@ -652,6 +652,7 @@ function loadAsr() {
       } catch (err) {
         lastErr = err;
         console.warn(`[stt] 読み込みに失敗しました（${i + 1} 回目、${device}）`, err.message);
+        writeLog(`[stt] 読み込みに失敗（${i + 1} 回目、${device}）: ${err.message}`);
       }
     }
     throw lastErr;
@@ -659,16 +660,42 @@ function loadAsr() {
   asrPromise.then(
     () => {
       asrReady = true;
+      asrRetries = 0;
       console.log('[stt] 音声認識モデルの準備完了');
       win?.webContents.send('stt-status', { ready: true });
     },
     (err) => {
       console.error('[stt] 読み込み失敗', err);
+      writeLog(`[stt] 読み込み失敗: ${err.message}`);
       asrPromise = null;
-      win?.webContents.send('stt-status', { ready: false, error: err.message });
+      // 起動したタイミングによって失敗することがあるので、まずは裏で時間をおいてやり直す。
+      // それでもだめなときだけ、画面にエラーを出す（話しかけたときにも、もう一度読み込む）
+      const delay = ASR_RETRY_DELAYS[asrRetries++];
+      if (delay) {
+        console.warn(`[stt] ${delay / 1000} 秒後にもう一度読み込みます`);
+        setTimeout(() => { if (!asrPromise && !asrReady) loadAsr().catch(() => {}); }, delay);
+      } else {
+        win?.webContents.send('stt-status', { ready: false, error: err.message });
+      }
     },
   );
   return asrPromise;
+}
+const ASR_RETRY_DELAYS = [15000, 60000];
+let asrRetries = 0;
+
+// 何かが失敗したときに、原因を後から調べられるよう、そのときのメモリの状況と一緒にログファイルに残す
+// （インストール版は %APPDATA%\Deskroid\deskroid.log、ソースから動かしているときはアプリのフォルダ）
+function writeLog(message) {
+  try {
+    const mem = process.memoryUsage();
+    const freeGB = (os.freemem() / 1e9).toFixed(1);
+    const line = `${new Date().toISOString()} ${message} | rss=${Math.round(mem.rss / 1e6)}MB free=${freeGB}GB\n`;
+    const file = path.join(DATA_DIR, 'deskroid.log');
+    // 大きくなりすぎないよう、1MB を超えたら作り直す
+    if (fs.existsSync(file) && fs.statSync(file).size > 1e6) fs.writeFileSync(file, '');
+    fs.appendFileSync(file, line);
+  } catch {}
 }
 
 // 無音や雑音のときに Whisper が出しがちな定型文
