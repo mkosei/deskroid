@@ -59,7 +59,7 @@ They are licensed separately from the app's MIT license. See [assets/avatars/LIC
 - Windows 10 / 11, or macOS (Apple silicon or Intel)
 - [Ollama](https://ollama.com/) and a chat model (the first-run setup screen can set this up for you)
 - For speaking in English, nothing else is needed: the Kokoro voice model (about 90 MB) is downloaded automatically the first time
-- [VOICEVOX](https://voicevox.hiroshiba.jp/) (only for speaking in Japanese; launch it once, and after that the app starts its engine in the background)
+- [VOICEVOX](https://voicevox.hiroshiba.jp/) (only for speaking in Japanese; press "Install voices" in the setup screen and the app downloads the engine from the official source, about 1.9 GB. If you already have the VOICEVOX app, that is used instead)
 - A GPU with 8 GB+ VRAM, or an Apple silicon Mac, is recommended for running the chat model smoothly
 
 ## Installation
@@ -97,7 +97,7 @@ On first launch, a setup screen checks that everything you need is in place. Any
 | Ollama | Opens the download page if it isn't installed, or starts it if it's installed but not running |
 | Chat model | Downloads it with a progress bar if missing (`qwen3:8b` is about 5 GB) |
 | English voice (Kokoro, optional) | Shown in English mode. Downloaded automatically the first time the character speaks (about 90 MB), or press "Prepare now" |
-| VOICEVOX (optional) | Shown in Japanese mode. Used for speaking Japanese. Opens the download page if it isn't installed |
+| VOICEVOX (optional) | Shown in Japanese mode. Used for speaking Japanese. If it isn't installed, "Install voices" downloads the engine with all of its voices |
 | Microphone | On Mac, grant microphone access here |
 | Speech recognition model (optional) | Used when you talk by voice (about 1 GB). It is also prepared automatically the first time you speak |
 
@@ -161,6 +161,7 @@ Right-click menu:
 | Switch character | Switch to another registered character |
 | Standing pose / Legs | Poses for 3D characters (hands behind back, relaxed, hands on hips, legs crossed, or auto) |
 | Reset conversation | Clear the conversation history |
+| Voice | Pick the VOICEVOX voice (character and speaking style), remembered per character (Japanese mode, while VOICEVOX is running) |
 | Timer | Set a timer from 1 minute to 1 hour, or cancel all timers |
 | Pomodoro | Start, pause, skip or stop a pomodoro, and choose the focus, break and long break lengths and how often the long break comes |
 | Clock | Show the clock (the pomodoro and timer countdowns show even when this is off), and put it on the right or left of the character |

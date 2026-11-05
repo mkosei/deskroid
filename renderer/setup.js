@@ -43,8 +43,17 @@ const TEXT = {
       ok: '使えます。',
       stopped: 'インストールされています。話すときはアプリが自動で起動します。',
       start: '今すぐ起動して確かめる',
-      missing: '入っていません。声で話させたいときは、ダウンロードして一度起動してください。文字だけで話すなら不要です。',
+      missing: '入っていません。「声を入れる」を押すと、VOICEVOX のエンジン（全部の声。約 1.9GB、展開すると約 2.2GB）を公式の配布元からダウンロードして使えるようにします。文字だけで話すなら不要です。',
+      install: '声を入れる',
+      terms: '利用規約',
+      termsNote: 'VOICEVOX と、声ごとのキャラクターの利用規約に従って使ってください。作った音声を公開するときは「VOICEVOX:ずんだもん」のようなクレジットが必要です。',
       download: 'ダウンロードページを開く',
+      phases: {
+        prepare: '準備中…',
+        download: (r, t) => `ダウンロード中  ${(r / 1e9).toFixed(2)} / ${(t / 1e9).toFixed(2)} GB`,
+        extract: '展開中…（数分かかることがあります）',
+        done: '入りました。エンジンを起動しています…',
+      },
     },
     kokoro: {
       title: '英語の声（Kokoro）',
@@ -102,8 +111,17 @@ const TEXT = {
       ok: 'Ready to use.',
       stopped: 'Installed. The app starts it automatically when the character speaks.',
       start: 'Start it now to check',
-      missing: "Not installed. To give your character a voice, download it and launch it once. Not needed for text-only chat.",
+      missing: 'Not installed. "Install voices" downloads the VOICEVOX engine with all of its voices (about 1.9 GB, about 2.2 GB once unpacked) from the official source. Not needed for text-only chat.',
+      install: 'Install voices',
+      terms: 'Terms of use',
+      termsNote: 'Follow the VOICEVOX terms and the terms for each character voice. If you publish audio you made, credit it like "VOICEVOX:Zundamon".',
       download: 'Open the download page',
+      phases: {
+        prepare: 'Getting ready…',
+        download: (r, t) => `Downloading  ${(r / 1e9).toFixed(2)} / ${(t / 1e9).toFixed(2)} GB`,
+        extract: 'Unpacking… (this can take a few minutes)',
+        done: 'Installed. Starting the engine…',
+      },
     },
     kokoro: {
       title: 'English voice (Kokoro)',
@@ -157,7 +175,7 @@ const ITEMS = [
     view: (s, x) => ({
       ok: { tone: 'ok', desc: x.ok },
       stopped: { tone: 'warn', desc: x.stopped, actions: [['startVoicevox', x.start]] },
-      missing: { tone: s.enabled ? 'warn' : 'wait', desc: x.missing, actions: [['openVoicevoxDownload', x.download]] },
+      missing: { tone: s.enabled ? 'warn' : 'wait', desc: x.missing, note: x.termsNote, actions: [['installVoicevox', x.install, true], ['openVoicevoxTerms', x.terms]] },
     })[s.state],
   },
   {
@@ -217,6 +235,12 @@ function render() {
       el.querySelector('.title').append(tag);
     }
     el.querySelector('.desc').textContent = v.desc;
+    if (v.note) {
+      const n = document.createElement('small');
+      n.className = 'note';
+      n.textContent = v.note;
+      el.querySelector('.desc').append(n);
+    }
     for (const [action, label, primary] of v.actions || []) {
       const b = document.createElement('button');
       b.textContent = busy === action ? T.running : label;
@@ -271,6 +295,11 @@ window.setup.onProgress((p) => {
   if (p.item === 'model') {
     if (p.total) pct = (p.completed || 0) / p.total * 100;
     text = p.total ? `${p.status}  ${(p.completed / 1e9 || 0).toFixed(2)} / ${(p.total / 1e9).toFixed(2)} GB` : p.status;
+  } else if (p.item === 'voicevox') {
+    const P = t().voicevox.phases;
+    if (p.phase === 'download' && p.total) pct = p.received / p.total * 100;
+    if (p.phase === 'extract' || p.phase === 'done') pct = 100;
+    text = p.phase === 'download' ? P.download(p.received, p.total) : P[p.phase] || '';
   } else if (p.item === 'stt' || p.item === 'kokoro') {
     pct = p.progress;
     text = t().downloading(p.file);

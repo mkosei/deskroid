@@ -6,6 +6,7 @@ const STRINGS = {
     legs: '足',
     resetChat: '会話をリセット',
     clock: { menu: '時計', show: '表示する', right: 'キャラの右に出す', left: 'キャラの左に出す' },
+    voice: { menu: '声', sample: 'この声でいくね。' },
     timer: {
       menu: 'タイマー',
       menuRunning: (n) => `タイマー（${n} 件セット中）`,
@@ -82,6 +83,7 @@ const STRINGS = {
     legs: 'Legs',
     resetChat: 'Reset conversation',
     clock: { menu: 'Clock', show: 'Show the clock', right: 'Right of the character', left: 'Left of the character' },
+    voice: { menu: 'Voice', sample: "I'll use this voice." },
     timer: {
       menu: 'Timer',
       menuRunning: (n) => `Timer (${n} set)`,

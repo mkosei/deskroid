@@ -8,6 +8,7 @@ const fs = require('fs');
 const OLLAMA_SITE = 'https://ollama.com/';
 const OLLAMA_DOWNLOAD = 'https://ollama.com/download';
 const VOICEVOX_SITE = 'https://voicevox.hiroshiba.jp/';
+const VOICEVOX_TERMS = 'https://voicevox.hiroshiba.jp/term/';
 
 async function getJson(url, timeoutMs = 3000) {
   const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
@@ -146,6 +147,10 @@ async function runAction(name, ctx, onProgress) {
       return shell.openExternal(VOICEVOX_SITE);
     case 'startVoicevox':
       return ctx.startVoicevox();
+    case 'installVoicevox':
+      return ctx.installVoicevox((p) => onProgress({ item: 'voicevox', ...p }));
+    case 'openVoicevoxTerms':
+      return shell.openExternal(VOICEVOX_TERMS);
     case 'requestMic':
       if (isMac) return systemPreferences.askForMediaAccess('microphone');
       return true;

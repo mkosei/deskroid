@@ -11,6 +11,7 @@ const { MODEL_FILTERS, importModel, defaultPersona } = require('./model-import')
 const setup = require('./setup');
 const { strings } = require('./i18n');
 const { createPomodoro } = require('./pomodoro');
+const { installEngine, findInstalledEngine } = require('./voicevox-install');
 
 const IS_MAC = process.platform === 'darwin';
 
@@ -28,6 +29,10 @@ const CACHE_ROOT = process.env.LOCALAPPDATA || app.getPath('userData');
 const MODEL_CACHE_DIR = process.env.LOCALAPPDATA
   ? path.join(process.env.LOCALAPPDATA, APP_NAME, 'hf-cache')
   : path.join(app.getPath('userData'), 'hf-cache');
+// セットアップのボタンでダウンロードした VOICEVOX エンジン（約 2.2GB）の置き場所
+const VOICEVOX_DIR = process.env.LOCALAPPDATA
+  ? path.join(process.env.LOCALAPPDATA, APP_NAME, 'voicevox-engine')
+  : path.join(app.getPath('userData'), 'voicevox-engine');
 
 function migrateOldData() {
   const userData = app.getPath('userData');
@@ -116,6 +121,8 @@ function loadConfig() {
   // 配色：配色設定画面で保存したもの（config.local.json の themes）があればそれを使う
   config.defaultTheme = chara.theme || {};
   config.theme = local.themes?.[id] || config.defaultTheme;
+  // 声：右クリックメニューで選んだ話者（config.local.json の voices）があればそれを使う
+  if (local.voices?.[id] !== undefined) config.voice.speaker = local.voices[id];
 
   // 言語："auto" は OS の言語に合わせる（日本語以外は英語）
   config.languageSetting = rawConfig.language || 'auto';
@@ -344,6 +351,48 @@ function setPomodoroSetting(key, value) {
   sendClockState();
 }
 
+// VOICEVOX の話者の一覧（日本語で、エンジンが動いているときだけ）。[{ name, styles: [{ name, id }] }]
+async function voicevoxSpeakers() {
+  if (config.lang === 'en' || !config.voice?.enabled) return [];
+  try {
+    const res = await fetch(`${config.voice.voicevoxUrl}/speakers`, { signal: AbortSignal.timeout(1500) });
+    if (!res.ok) return [];
+    // 歌うための声（type が sing など）は会話に使えないので外す
+    return (await res.json())
+      .map((sp) => ({ ...sp, styles: (sp.styles || []).filter((st) => String(st.type ?? 'talk').includes('talk')) }))
+      .filter((sp) => sp.styles.length);
+  } catch {
+    return [];
+  }
+}
+
+// 右クリックメニューの「声」。キャラ（話者）ごとに、ノーマル・あまあま などの話し方を選ぶ
+function voiceMenu(T, speakers) {
+  const current = Number(config.voice.speaker);
+  return {
+    label: T.voice.menu,
+    submenu: speakers.map((sp) => {
+      const chosen = sp.styles.some((st) => st.id === current);
+      return {
+        label: chosen ? `${sp.name}  ✓` : sp.name,
+        submenu: sp.styles.map((st) => ({
+          label: st.name,
+          type: 'radio',
+          checked: st.id === current,
+          click: () => setSpeaker(st.id),
+        })),
+      };
+    }),
+  };
+}
+
+// 声を変えて、このキャラ用にこの PC の設定に残す。新しい声でひとこと話す
+function setSpeaker(id) {
+  writeLocalConfig({ voices: { ...readLocalConfig().voices, [config.characterId]: id } });
+  config.voice.speaker = id;
+  announce(strings(config.lang).voice.sample, { icon: '🔊', notify: false });
+}
+
 // 右クリックメニューの「タイマー」。決まった長さから選んでセットする
 const QUICK_TIMERS = [1, 3, 5, 10, 15, 30, 60];
 function timerMenu(T) {
@@ -360,6 +409,7 @@ function timerMenu(T) {
 
 ipcMain.on('show-menu', async (event, extra) => {
   const chatModels = await ollamaModels();
+  const speakers = await voicevoxSpeakers();
   const T = strings(config.lang);
   const characters = Object.entries(rawConfig.characters || {});
   const poses = extra?.poses;
@@ -392,6 +442,7 @@ ipcMain.on('show-menu', async (event, extra) => {
       })),
     }] : []),
     { label: T.resetChat, click: () => event.sender.send('reset-chat') },
+    ...(speakers.length ? [voiceMenu(T, speakers)] : []),
     timerMenu(T),
     pomodoroMenu(T),
     {
@@ -711,9 +762,12 @@ ipcMain.handle('chat', async (event, { id, messages }) => {
 
 let voicevoxProc = null;
 
-// VOICEVOX エンジン（run / run.exe）を探す。エディタを一度起動すると vvpp-engines に展開される
+// VOICEVOX エンジン（run / run.exe）を探す。
+// ①設定で決めた場所 ②セットアップのボタンで入れたもの ③VOICEVOX 本体（エディタを一度起動すると vvpp-engines に展開される）
 function findVoicevoxEngine() {
   if (config.voice?.enginePath && fs.existsSync(config.voice.enginePath)) return config.voice.enginePath;
+  const installed = findInstalledEngine(VOICEVOX_DIR);
+  if (installed) return installed;
   const exeName = IS_MAC ? 'run' : 'run.exe';
   const roots = IS_MAC
     ? [path.join(os.homedir(), 'Library', 'Application Support', 'voicevox', 'vvpp-engines')]
@@ -737,6 +791,23 @@ async function voicevoxReady() {
   } catch {
     return false;
   }
+}
+
+// セットアップのボタンから、エンジンをダウンロードして入れる。2 回押されても 1 回だけ動かす
+let voicevoxInstall = null;
+function installVoicevox(onProgress) {
+  voicevoxInstall ||= (async () => {
+    try {
+      await installEngine(VOICEVOX_DIR, onProgress, { en: config.lang === 'en' });
+      await ensureVoicevox({ force: true });
+    } catch (err) {
+      writeLog(`VOICEVOX のインストールに失敗: ${err.message}`);
+      throw err;
+    } finally {
+      voicevoxInstall = null;
+    }
+  })();
+  return voicevoxInstall;
 }
 
 // エンジンが動いていなければ裏で起動する（VOICEVOX 本体を開かなくても喋れるように）。
@@ -1089,6 +1160,7 @@ function setupContext() {
     voicevoxReady,
     // 声なしのキャラや英語モードでも、確認のために起動はできるように
     startVoicevox: () => ensureVoicevox({ force: true }),
+    installVoicevox: (onProgress) => installVoicevox(onProgress),
     asr: {
       isReady: () => asrReady,
       load: (onProgress) => { asrProgress = onProgress; return loadAsr(); },
