@@ -161,6 +161,7 @@ Right-click menu:
 | Standing pose / Legs | Poses for 3D characters (hands behind back, relaxed, hands on hips, legs crossed, or auto) |
 | Reset conversation | Clear the conversation history |
 | Always on top | Keep the character above other windows |
+| Open when the PC starts | Start Deskroid automatically when you sign in to Windows / macOS |
 | Import model… | Add your own model (see below) |
 | Open character settings | Open `config.local.json` |
 | Color settings… | Change the colors of the speech bubble and input box. Pick background, text, accent and name tag colors and see them applied right away. Can also generate colors automatically from the character's look |

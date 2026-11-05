@@ -247,6 +247,12 @@ ipcMain.handle('set-top-extra', (_e, extra) => {
   return height - WIN_H;
 });
 
+// パソコンの起動時（ログイン時）に開く設定。インストール版はアプリ本体を、
+// ソースから動かしているときは electron.exe にアプリのフォルダを渡して起動する
+function loginItemOptions() {
+  return app.isPackaged ? {} : { path: process.execPath, args: [path.resolve(__dirname)] };
+}
+
 // 音声認識のモデルの選択肢（メモリと正確さのどちらを取るか）
 const SPEECH_MODELS = {
   accurate: { model: 'onnx-community/whisper-large-v3-turbo', dtype: { encoder_model: 'q8', decoder_model_merged: 'q4' } },
@@ -331,6 +337,12 @@ ipcMain.on('show-menu', async (event, extra) => {
       type: 'checkbox',
       checked: win.isAlwaysOnTop(),
       click: (item) => win.setAlwaysOnTop(item.checked, 'floating'),
+    },
+    {
+      label: T.openAtLogin,
+      type: 'checkbox',
+      checked: app.getLoginItemSettings(loginItemOptions()).openAtLogin,
+      click: (item) => app.setLoginItemSettings({ ...loginItemOptions(), openAtLogin: item.checked }),
     },
     { type: 'separator' },
     { label: T.importModel, click: () => importModelFromDialog() },
