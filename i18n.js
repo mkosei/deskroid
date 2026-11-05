@@ -7,6 +7,13 @@ const STRINGS = {
     resetChat: '会話をリセット',
     clock: { menu: '時計', show: '表示する', right: 'キャラの右に出す', left: 'キャラの左に出す' },
     voice: { menu: '声', sample: 'この声でいくね。' },
+    update: {
+      voicevox: (v) => `VOICEVOX の新しい版（${v}）があります…`,
+      restart: (v) => `再起動して Deskroid を更新する（${v}）`,
+      download: (v) => `Deskroid の新しい版（${v}）をダウンロード…`,
+      announceReady: (v) => `Deskroid の新しい版（${v}）の準備ができたよ。終了するときに入れ替わるよ。すぐ更新するなら右クリックメニューからどうぞ。`,
+      announceAvailable: (v) => `Deskroid の新しい版（${v}）が出てるよ。右クリックメニューからダウンロードできるよ。`,
+    },
     timer: {
       menu: 'タイマー',
       menuRunning: (n) => `タイマー（${n} 件セット中）`,
@@ -84,6 +91,13 @@ const STRINGS = {
     resetChat: 'Reset conversation',
     clock: { menu: 'Clock', show: 'Show the clock', right: 'Right of the character', left: 'Left of the character' },
     voice: { menu: 'Voice', sample: "I'll use this voice." },
+    update: {
+      voicevox: (v) => `A new VOICEVOX version (${v}) is available…`,
+      restart: (v) => `Restart to update Deskroid (${v})`,
+      download: (v) => `Download the new Deskroid (${v})…`,
+      announceReady: (v) => `A new version of Deskroid (${v}) is ready. It will be installed when you quit, or restart now from the right-click menu.`,
+      announceAvailable: (v) => `A new version of Deskroid (${v}) is out. You can download it from the right-click menu.`,
+    },
     timer: {
       menu: 'Timer',
       menuRunning: (n) => `Timer (${n} set)`,

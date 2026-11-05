@@ -71,6 +71,8 @@ async function checkAll(ctx) {
     else if (ctx.findVoicevoxEngine()) result.voicevox = { state: 'stopped' };
     else result.voicevox = { state: 'missing' };
     result.voicevox.optional = true;
+    const update = ctx.voicevoxUpdate?.();
+    if (update && result.voicevox.state !== 'missing') result.voicevox.update = update;
     result.voicevox.enabled = !!config.voice?.enabled;
   }
 

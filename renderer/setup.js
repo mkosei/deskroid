@@ -45,6 +45,8 @@ const TEXT = {
       start: '今すぐ起動して確かめる',
       missing: '入っていません。「声を入れる」を押すと、VOICEVOX のエンジン（全部の声。約 1.9GB、展開すると約 2.2GB）を公式の配布元からダウンロードして使えるようにします。文字だけで話すなら不要です。',
       install: '声を入れる',
+      update: (v, c, gb) => `新しい版（${v}）が出ています。今は ${c} です。更新すると、約 ${gb}GB をダウンロードして入れ替えます。`,
+      updateButton: '更新する',
       terms: '利用規約',
       termsNote: 'VOICEVOX と、声ごとのキャラクターの利用規約に従って使ってください。作った音声を公開するときは「VOICEVOX:ずんだもん」のようなクレジットが必要です。',
       download: 'ダウンロードページを開く',
@@ -113,6 +115,8 @@ const TEXT = {
       start: 'Start it now to check',
       missing: 'Not installed. "Install voices" downloads the VOICEVOX engine with all of its voices (about 1.9 GB, about 2.2 GB once unpacked) from the official source. Not needed for text-only chat.',
       install: 'Install voices',
+      update: (v, c, gb) => `A new version (${v}) is available; you have ${c}. Updating downloads about ${gb} GB and replaces it.`,
+      updateButton: 'Update',
       terms: 'Terms of use',
       termsNote: 'Follow the VOICEVOX terms and the terms for each character voice. If you publish audio you made, credit it like "VOICEVOX:Zundamon".',
       download: 'Open the download page',
@@ -172,11 +176,16 @@ const ITEMS = [
     key: 'voicevox',
     optional: true,
     link: 'openVoicevoxSite',
-    view: (s, x) => ({
+    view: (s, x) => (s.update ? {
+      // 自分で入れたエンジンに新しい版があるとき
+      tone: 'warn',
+      desc: x.update(s.update.version, s.update.current, (s.update.size / 1e9).toFixed(1)),
+      actions: [['installVoicevox', x.updateButton, true]],
+    } : {
       ok: { tone: 'ok', desc: x.ok },
       stopped: { tone: 'warn', desc: x.stopped, actions: [['startVoicevox', x.start]] },
       missing: { tone: s.enabled ? 'warn' : 'wait', desc: x.missing, note: x.termsNote, actions: [['installVoicevox', x.install, true], ['openVoicevoxTerms', x.terms]] },
-    })[s.state],
+    }[s.state]),
   },
   {
     key: 'kokoro',

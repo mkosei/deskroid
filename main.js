@@ -11,7 +11,8 @@ const { MODEL_FILTERS, importModel, defaultPersona } = require('./model-import')
 const setup = require('./setup');
 const { strings } = require('./i18n');
 const { createPomodoro } = require('./pomodoro');
-const { installEngine, findInstalledEngine } = require('./voicevox-install');
+const { installEngine, findInstalledEngine, checkEngineUpdate, removeOldVersions, stopOtherEngines } = require('./voicevox-install');
+const { startUpdateChecks, appUpdateMenu } = require('./app-update');
 
 const IS_MAC = process.platform === 'darwin';
 
@@ -413,7 +414,12 @@ ipcMain.on('show-menu', async (event, extra) => {
   const T = strings(config.lang);
   const characters = Object.entries(rawConfig.characters || {});
   const poses = extra?.poses;
+  const updates = [
+    ...appUpdateMenu(T),
+    ...(activeVoicevoxUpdate() ? [{ label: T.update.voicevox(voicevoxUpdate.version), click: () => openSetupWindow() }] : []),
+  ];
   const menu = Menu.buildFromTemplate([
+    ...(updates.length ? [...updates, { type: 'separator' }] : []),
     ...(characters.length > 1 ? [{
       label: T.switchCharacter,
       submenu: characters.map(([id, c]) => ({
@@ -793,13 +799,25 @@ async function voicevoxReady() {
   }
 }
 
-// セットアップのボタンから、エンジンをダウンロードして入れる。2 回押されても 1 回だけ動かす
+// セットアップのボタンから、エンジンをダウンロードして入れる（新しい版への更新も同じ）。2 回押されても 1 回だけ動かす
 let voicevoxInstall = null;
+let voicevoxUpdate = null; // 新しい版があれば { current, version, size }
+let voicevoxInstalls = 0;  // 入れ終わった回数（入れている間に始まった更新の確認の結果を捨てるため）
 function installVoicevox(onProgress) {
   voicevoxInstall ||= (async () => {
     try {
-      await installEngine(VOICEVOX_DIR, onProgress, { en: config.lang === 'en' });
+      const before = findVoicevoxEngine();
+      const exe = await installEngine(VOICEVOX_DIR, onProgress, { en: config.lang === 'en' });
+      // 更新のとき：古いエンジンを止めて、新しいエンジンで起動し直す。
+      // このアプリが起動したものだけでなく、自分で入れた古い版が動いていればそれも止める（前に落ちたときの残りなど）
+      if (before && before !== exe) {
+        await stopVoicevox();
+        if (await stopOtherEngines(VOICEVOX_DIR, exe)) await waitVoicevoxStopped();
+      }
       await ensureVoicevox({ force: true });
+      removeOldVersions(VOICEVOX_DIR);
+      voicevoxUpdate = null;
+      voicevoxInstalls++;
     } catch (err) {
       writeLog(`VOICEVOX のインストールに失敗: ${err.message}`);
       throw err;
@@ -808,6 +826,36 @@ function installVoicevox(onProgress) {
     }
   })();
   return voicevoxInstall;
+}
+
+// このアプリが起動したエンジンを止める（止まるまで最大 10 秒待つ）
+async function stopVoicevox() {
+  if (!voicevoxProc) return;
+  voicevoxProc.kill();
+  voicevoxProc = null;
+  await waitVoicevoxStopped();
+}
+
+async function waitVoicevoxStopped() {
+  for (let i = 0; i < 20 && (await voicevoxReady()); i++) await new Promise((r) => setTimeout(r, 500));
+}
+
+// 自分で入れたエンジンに新しい版が出ていないか調べる（起動時と、その後 1 日ごと）
+async function checkVoicevoxUpdate() {
+  if (voicevoxInstall) return;
+  const installs = voicevoxInstalls;
+  try {
+    const next = await checkEngineUpdate(VOICEVOX_DIR);
+    if (voicevoxInstall || installs !== voicevoxInstalls) return;
+    if (next && next.version !== voicevoxUpdate?.version) writeLog(`VOICEVOX の新しい版があります: ${next.current} → ${next.version}`);
+    voicevoxUpdate = next;
+  } catch {}
+}
+
+// ④ 知らせるのは、日本語で、自分で入れたエンジンを実際に使っているときだけ（メニューとセットアップで同じ判断）
+function activeVoicevoxUpdate() {
+  if (!voicevoxUpdate || config.lang === 'en') return null;
+  return findVoicevoxEngine() === findInstalledEngine(VOICEVOX_DIR) ? voicevoxUpdate : null;
 }
 
 // エンジンが動いていなければ裏で起動する（VOICEVOX 本体を開かなくても喋れるように）。
@@ -1161,6 +1209,8 @@ function setupContext() {
     // 声なしのキャラや英語モードでも、確認のために起動はできるように
     startVoicevox: () => ensureVoicevox({ force: true }),
     installVoicevox: (onProgress) => installVoicevox(onProgress),
+    // 自分で入れたエンジンを使っていて、新しい版があるときだけ
+    voicevoxUpdate: activeVoicevoxUpdate,
     asr: {
       isReady: () => asrReady,
       load: (onProgress) => { asrProgress = onProgress; return loadAsr(); },
@@ -1231,8 +1281,16 @@ app.whenReady().then(async () => {
     createWindow();
     if (!ollamaOk) openSetupWindow();
   }
+  removeOldVersions(VOICEVOX_DIR); // 前の更新で消しきれなかった古い版を、エンジンを起動する前に片付ける
   ensureVoicevox();
   listApps().catch(() => {}); // 最初の「〇〇開いて」を待たせないよう、アプリの一覧を先に集めておく
+  // アプリと VOICEVOX エンジンの新しい版を調べる（起動の少しあとと、その後 1 日ごと）
+  startUpdateChecks({
+    announce: (text) => announce(text, { icon: '⬆', notify: true }),
+    strings: () => strings(config.lang),
+    log: writeLog,
+    extraChecks: [checkVoicevoxUpdate],
+  });
 
   for (const name of registerHotkeys(config.hotkeys)) {
     console.warn(`ホットキーを登録できませんでした（他のアプリが使用中かも）: ${name}=${config.hotkeys[name]}`);

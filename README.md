@@ -88,6 +88,14 @@ The buttons always download the latest version. Older versions and release notes
 xattr -dr com.apple.quarantine /Applications/Deskroid.app
 ```
 
+### Updates
+
+Shortly after startup, and once a day after that, the app checks for a new version.
+
+- **Windows**: the new version is downloaded in the background and installed when you quit the app. To update right away, right-click → "Restart to update Deskroid"
+- **Mac**: the character tells you when a new version is out. Right-click → "Download the new Deskroid" and install it again (the app is not signed, so it can't replace itself)
+- **VOICEVOX**: if the engine installed with "Install voices" has a new version, it shows up in the right-click menu and the setup screen. "Update" replaces it (about 1.9 GB)
+
 ### First-run setup
 
 On first launch, a setup screen checks that everything you need is in place. Anything missing can be set up with the buttons on that screen.

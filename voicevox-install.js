@@ -20,18 +20,79 @@ function assetName(version, platform = process.platform, arch = process.arch) {
 
 const exeName = () => (process.platform === 'win32' ? 'run.exe' : 'run');
 
-// 入れたエンジンの run(.exe)。新しい版から探す
-function findInstalledEngine(root) {
-  if (!fs.existsSync(root)) return null;
-  const versions = fs.readdirSync(root, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && /^\d+\.\d+/.test(d.name))
+// 版の番号を比べる（"0.27.0" > "0.26.0" なら正）
+const compareVersions = (a, b) => String(a).replace(/^v/, '').localeCompare(String(b).replace(/^v/, ''), undefined, { numeric: true });
+
+// 入っている版（新しい順）。run(.exe) があるものだけ
+function installedVersions(root) {
+  if (!fs.existsSync(root)) return [];
+  return fs.readdirSync(root, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && /^\d+\.\d+\.\d+$/.test(d.name) && fs.existsSync(path.join(root, d.name, exeName())))
     .map((d) => d.name)
-    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
-  for (const v of versions) {
-    const exe = path.join(root, v, exeName());
-    if (fs.existsSync(exe)) return exe;
+    .sort((a, b) => compareVersions(b, a));
+}
+
+// 入れたエンジンの run(.exe)。一番新しい版
+function findInstalledEngine(root) {
+  const [v] = installedVersions(root);
+  return v ? path.join(root, v, exeName()) : null;
+}
+
+// 新しい版があるか。{ version, size } か null（入れていない・調べられないときも null）
+async function checkEngineUpdate(root) {
+  const [current] = installedVersions(root);
+  if (!current) return null;
+  const latest = await latestAsset();
+  // API に届かなかった（大きさがわからない）ときは、あると言わない
+  if (!latest.size || compareVersions(latest.version, current) <= 0) return null;
+  return { current, version: latest.version, size: latest.size };
+}
+
+// 一番新しい版以外と、展開の途中で残ったものを消す（アプリの起動時と、更新のあとに呼ぶ）。
+// 消す前にフォルダの名前を変える：Windows では動いているエンジンのフォルダは名前を変えられないので、
+// 動いている版を途中まで消してしまうことがない（そのときは何もせず、次の起動時にまた試す）
+function removeOldVersions(root) {
+  if (!fs.existsSync(root)) return;
+  const [keep] = installedVersions(root);
+  for (const d of fs.readdirSync(root)) {
+    const old = /^\d+\.\d+\.\d+$/.test(d) && d !== keep;
+    const leftover = /\.(removing|extracting)$/.test(d);
+    if (!old && !leftover) continue;
+    let target = path.join(root, d);
+    try {
+      if (old) {
+        const renamed = `${target}.removing`;
+        fs.renameSync(target, renamed);
+        target = renamed;
+      }
+      fs.rmSync(target, { recursive: true, force: true });
+    } catch {}
   }
-  return null;
+}
+
+// root の下で動いているエンジンのうち、keepExe 以外を止める（更新のとき、古い版を止めるため）。
+// このアプリが起動したものでなくても（前に落ちたときの残りなど）止める
+function stopOtherEngines(root, keepExe) {
+  const under = (p) => p && path.resolve(p).toLowerCase().startsWith(path.resolve(root).toLowerCase() + path.sep)
+    && path.resolve(p).toLowerCase() !== path.resolve(keepExe || '').toLowerCase();
+  return new Promise((resolve) => {
+    const isWin = process.platform === 'win32';
+    const p = isWin
+      ? spawn('powershell.exe', ['-NoProfile', '-Command', 'Get-Process run -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Id)`t$($_.Path)" }'], { windowsHide: true })
+      : spawn('ps', ['-axo', 'pid=,comm=']);
+    let out = '';
+    p.stdout.on('data', (d) => { out += d; });
+    p.on('error', () => resolve(0));
+    p.on('close', () => {
+      let n = 0;
+      for (const line of out.split(/\r?\n/)) {
+        const m = isWin ? line.match(/^(\d+)\t(.+)$/) : line.trim().match(/^(\d+)\s+(.+)$/);
+        if (!m || !under(m[2].trim())) continue;
+        try { process.kill(Number(m[1])); n++; } catch {}
+      }
+      resolve(n);
+    });
+  });
 }
 
 // 最新版の配布物（名前・URL・大きさ）。API に届かなければ決めておいた版にする
@@ -155,13 +216,9 @@ async function installEngine(root, onProgress = () => {}, { en = false } = {}) {
   if (process.platform !== 'win32') fs.chmodSync(path.join(target, exeName()), 0o755);
   // 展開できたら、落としたファイルは消す（容量を空ける）
   fs.rmSync(file, { force: true });
-  // 古い版が残っていれば消す
-  for (const d of fs.readdirSync(root)) {
-    if (d === asset.version || !/^\d+\.\d+\.\d+$/.test(d)) continue;
-    try { fs.rmSync(path.join(root, d), { recursive: true, force: true }); } catch {} // 動いている古い版は消せないので、次の機会に
-  }
+  // 古い版は、呼び出し側が新しい版に切り替えてから removeOldVersions で消す（動いている間は消せないため）
   onProgress({ phase: 'done' });
   return path.join(target, exeName());
 }
 
-module.exports = { installEngine, findInstalledEngine, assetName, latestAsset };
+module.exports = { installEngine, findInstalledEngine, installedVersions, checkEngineUpdate, removeOldVersions, stopOtherEngines, compareVersions, assetName, latestAsset };
