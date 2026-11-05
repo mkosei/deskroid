@@ -684,13 +684,25 @@ function loadAsr() {
 const ASR_RETRY_DELAYS = [15000, 60000];
 let asrRetries = 0;
 
+// C:\Users\名前\... や /Users/名前/... の「名前」を *** にする（ホームフォルダの名前とユーザー名の両方）
+function maskUserPaths(text) {
+  let out = String(text)
+    .replace(/([A-Za-z]:[\\/]+Users[\\/]+)[^\\/\s"'`]+/gi, '$1***')
+    .replace(/(\/(?:Users|home)\/)[^/\s"'`]+/g, '$1***');
+  const name = os.userInfo().username;
+  if (name && name.length >= 3) out = out.split(name).join('***');
+  return out;
+}
+
 // 何かが失敗したときに、原因を後から調べられるよう、そのときのメモリの状況と一緒にログファイルに残す
 // （インストール版は %APPDATA%\Deskroid\deskroid.log、ソースから動かしているときはアプリのフォルダ）
 function writeLog(message) {
   try {
     const mem = process.memoryUsage();
     const freeGB = (os.freemem() / 1e9).toFixed(1);
-    const line = `${new Date().toISOString()} ${message} | rss=${Math.round(mem.rss / 1e6)}MB free=${freeGB}GB\n`;
+    // ログを人に送っても困らないよう、パソコンの中の場所に入っているユーザー名を伏せる
+    const masked = maskUserPaths(message);
+    const line = `${new Date().toISOString()} ${masked} | rss=${Math.round(mem.rss / 1e6)}MB free=${freeGB}GB\n`;
     const file = path.join(DATA_DIR, 'deskroid.log');
     // 大きくなりすぎないよう、1MB を超えたら作り直す
     if (fs.existsSync(file) && fs.statSync(file).size > 1e6) fs.writeFileSync(file, '');
