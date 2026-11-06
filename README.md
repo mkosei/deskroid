@@ -261,7 +261,7 @@ Main keys:
 | `apps` | Extra sites and apps the character can open (installed apps and common sites like Google, YouTube and Amazon work without this). `open` is a URL or a path to an app; `search` is a search URL containing `{query}`. Use a path for apps that are not in the Start menu / Applications folder |
 | `weather.places` | Locations for weather lookups (name, latitude and longitude; `name_en` sets the English name) |
 | `voice` | Voice settings: Kokoro voice (`enVoice`) and speed (`enSpeed`) for English; VOICEVOX URL, speaker ID and speaking speed for Japanese |
-| `stt` | Speech recognition model, device and precision. `silenceMs` is how long to wait in silence before sending what you said (default 3000 = 3 seconds) |
+| `stt` | Speech recognition model, device and precision. `silenceMs` is how long to wait in silence before sending what you said (default 3000 = 3 seconds). The speech recognition model (about 1.5 GB of memory) is loaded when you start talking and unloaded after `unloadAfterMinutes` minutes without use (default 10; 0 keeps it loaded). Set `preload` to true to load it at startup |
 
 ## Notes
 

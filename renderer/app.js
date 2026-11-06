@@ -314,7 +314,6 @@ app.ticker.add(() => {
 
 let voiceMode = false;    // 音声会話モード（話し終わるたびに自動で聞く）
 let oneShot = false;      // ホットキーで 1 回だけ聞いている途中か
-let sttReady = false;
 let mic = null;           // 録音中のリソース
 
 // ホットキー：1 回だけ聞いて返事をする。聞いている途中にもう一度押すと取り消し
@@ -348,8 +347,9 @@ function setVoiceMode(on) {
 
 async function startListening() {
   if (mic || !(voiceMode || oneShot)) return;
-  if (!sttReady) setStatus('loading');
-  else setStatus('listening');
+  // 音声認識のモデルは話しかけ始めたときに読み込む。読み込んでいる間も録音はしているので「聞いている」と出す
+  window.mate.sttWarmup('listen');
+  setStatus('listening');
 
   let stream;
   try {
@@ -498,7 +498,6 @@ window.mate.on('toggle-voice-chat', () => setVoiceMode(!voiceMode));
 window.mate.on('listen-once', listenOnce);
 
 window.mate.on('stt-status', ({ ready, error }) => {
-  sttReady = ready;
   if (ready && mic) setStatus('listening');
   if (error) {
     // モデルの読み込み失敗（メモリ不足など）は、生のエラーではなく「どうすればいいか」を伝える
@@ -941,7 +940,7 @@ window.mate.on('theme-auto-request', async () => {
   const hasTheme = Object.keys(config.theme || {}).length > 0;
   if (hasTheme) applyTheme(config.theme);
   setClock(await window.mate.clockState());
-  if (config.stt?.enabled) window.mate.sttWarmup();
+  if (config.stt?.enabled) window.mate.sttWarmup('start');
   else micBtn.classList.add('hidden');
 
   try {

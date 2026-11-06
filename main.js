@@ -308,7 +308,6 @@ async function switchSpeechModel(id) {
   asrReady = false;
   win?.webContents.send('stt-status', { ready: false });
   try { await (await old)?.dispose?.(); } catch {}
-  if (config.stt?.enabled) loadAsr().catch(() => {});
 }
 
 // 右クリックメニューの「ポモドーロ」。動いているかどうかで出す項目を変える
@@ -936,6 +935,40 @@ ipcMain.handle('tts', async (_e, text) => {
 let asrPromise = null;
 let asrReady = false;
 let asrProgress = null; // セットアップ画面に読み込みの進み具合を知らせる
+let asrBusy = 0;        // 聞き取りの途中の数（途中ではメモリから外さない）
+let asrIdleTimer = null;
+
+// 音声認識のモデル（large-v3-turbo）は読み込むとメモリを約 1.5GB 使う。
+// 起動時には読み込まず、話しかけ始めたときに読み込み（話している間に読み込みが終わる）、
+// しばらく使わなければメモリから外す（外すと 0.2GB ほどに戻る。読み込み直しは 3 秒ほど）
+const ASR_IDLE_MS = () => (config.stt?.unloadAfterMinutes ?? 10) * 60 * 1000;
+
+function touchAsr() {
+  clearTimeout(asrIdleTimer);
+  const ms = ASR_IDLE_MS();
+  if (ms > 0) asrIdleTimer = setTimeout(unloadAsrIfIdle, ms);
+}
+
+async function unloadAsrIfIdle() {
+  if (!asrReady || asrBusy) return touchAsr();
+  const old = asrPromise;
+  asrPromise = null;
+  asrReady = false;
+  win?.webContents.send('stt-status', { ready: false });
+  try { await (await old)?.dispose?.(); } catch {}
+  console.log('[stt] しばらく使っていないので、音声認識のモデルをメモリから外しました');
+}
+
+// 音声認識のモデルがダウンロード済みか（読み込んではいなくても、セットアップでは「準備できている」とする）
+function asrDownloaded() {
+  const suffix = { q8: '_quantized', int8: '_int8', uint8: '_uint8', q4: '_q4', q4f16: '_q4f16', fp16: '_fp16', fp32: '', bnb4: '_bnb4' };
+  const dtype = config.stt?.dtype || {};
+  const dir = path.join(MODEL_CACHE_DIR, ...String(config.stt?.model || '').split('/'), 'onnx');
+  return ['encoder_model', 'decoder_model_merged'].every((name) => {
+    const s = suffix[dtype[name] ?? 'fp32'];
+    return s !== undefined && fs.existsSync(path.join(dir, `${name}${s}.onnx`));
+  });
+}
 
 function loadAsr() {
   if (asrPromise) return asrPromise;
@@ -967,6 +1000,7 @@ function loadAsr() {
   asrPromise.then(
     () => {
       asrReady = true;
+      touchAsr();
       asrRetries = 0;
       console.log('[stt] 音声認識モデルの準備完了');
       win?.webContents.send('stt-status', { ready: true });
@@ -1024,16 +1058,27 @@ const STT_NOISE = {
 };
 
 ipcMain.handle('stt', async (_e, samples) => {
-  const asr = await loadAsr();
-  const audio = samples instanceof Float32Array ? samples : new Float32Array(samples);
-  const language = config.lang === 'en' ? 'english' : 'japanese';
-  const { text } = await asr(audio, { language, task: 'transcribe' });
-  const t = text.trim();
-  return STT_NOISE[config.lang]?.test(t) ? '' : t;
+  asrBusy++;
+  try {
+    const asr = await loadAsr();
+    const audio = samples instanceof Float32Array ? samples : new Float32Array(samples);
+    const language = config.lang === 'en' ? 'english' : 'japanese';
+    const { text } = await asr(audio, { language, task: 'transcribe' });
+    const t = text.trim();
+    return STT_NOISE[config.lang]?.test(t) ? '' : t;
+  } finally {
+    asrBusy--;
+    touchAsr();
+  }
 });
 
-ipcMain.handle('stt-warmup', () => {
-  if (config.stt?.enabled) loadAsr().catch(() => {});
+// reason：'start'（キャラの画面を開いたとき）か 'listen'（話しかけ始めたとき）
+ipcMain.handle('stt-warmup', (_e, reason) => {
+  // 音声認識は話しかけ始めたときに読み込む（stt.preload が true なら起動時から）
+  if (config.stt?.enabled && (reason !== 'start' || config.stt.preload)) {
+    loadAsr().catch(() => {});
+    touchAsr();
+  }
   // 英語で声ありなら、最初の返事を待たせないよう Kokoro も先に読み込んでおく
   if (config.lang === 'en' && config.voice?.enabled) loadKokoro().catch((err) => console.warn('[tts] Kokoro を読み込めませんでした', err.message));
 });
@@ -1222,7 +1267,7 @@ function setupContext() {
     // 自分で入れたエンジンを使っていて、新しい版があるときだけ
     voicevoxUpdate: activeVoicevoxUpdate,
     asr: {
-      isReady: () => asrReady,
+      isReady: () => asrReady || asrDownloaded(),
       load: (onProgress) => { asrProgress = onProgress; return loadAsr(); },
     },
     kokoro: {

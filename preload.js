@@ -9,7 +9,7 @@ contextBridge.exposeInMainWorld('mate', {
   chat: (id, messages) => ipcRenderer.invoke('chat', { id, messages }),
   tts: (text) => ipcRenderer.invoke('tts', text),
   stt: (samples) => ipcRenderer.invoke('stt', samples),
-  sttWarmup: () => ipcRenderer.invoke('stt-warmup'),
+  sttWarmup: (reason) => ipcRenderer.invoke('stt-warmup', reason),
   clockState: () => ipcRenderer.invoke('clock-state'),
   pomodoro: (action) => ipcRenderer.send('pomodoro', action),
   timer: (action, minutes) => ipcRenderer.send('timer', { action, minutes }),
